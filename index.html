@@ -166,4 +166,774 @@
     /* ================= 2. 3D 立體圓桌包廂主畫面 ================= */
     #room-screen {
       position: fixed; inset: 0;
-      width: 100%; height:
+      width: 100%; height: 100dvh;
+      display: flex; flex-direction: column;
+      padding-top: var(--safe-top);
+      padding-bottom: var(--safe-bottom);
+      background: radial-gradient(circle at 50% 42%, #FFFDF9 0%, #ECD8C2 100%);
+      overflow: hidden;
+    }
+
+    .room-topbar {
+      height: 48px; padding: 0 10px;
+      display: flex; align-items: center; justify-content: space-between;
+      background: rgba(255,255,255,0.92); backdrop-filter: blur(8px);
+      border-bottom: 1px solid var(--border); flex-shrink: 0; z-index: 40;
+    }
+    .room-badge {
+      display: flex; align-items: center; gap: 5px; font-size: 12px; font-weight: 700;
+    }
+    .status-dot {
+      width: 8px; height: 8px; border-radius: 50%; background: #10B981;
+      box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.2);
+    }
+    .top-actions { display: flex; gap: 5px; }
+    .mini-btn {
+      padding: 5px 9px; border-radius: 9px; font-size: 11.5px; font-weight: 700;
+      border: 1px solid var(--border); background: #fff; color: var(--text); cursor: pointer;
+    }
+    .mini-btn.leave { background: #FEE2E2; color: #DC2626; border-color: #FECACA; }
+
+    /* 3D 圓桌舞台（統一座標系，保證食物精準擺在桌上、人物精準坐在桌邊） */
+    .table-stage {
+      flex: 1; position: relative;
+      display: flex; align-items: center; justify-content: center;
+      overflow: hidden; min-height: 0;
+    }
+    .scene-container {
+      position: relative;
+      width: min(92vw, 370px);
+      height: min(92vw, 370px);
+      display: flex; align-items: center; justify-content: center;
+    }
+    .wooden-table {
+      width: 56%; height: 56%;
+      border-radius: 50%;
+      background: radial-gradient(circle at 35% 30%, #F3B982 0%, #C86D1F 68%, #8E4A10 100%);
+      box-shadow:
+        0 14px 0 #6E390C,
+        0 22px 34px rgba(62, 39, 35, 0.36),
+        inset 0 4px 14px rgba(255, 255, 255, 0.5);
+      border: 5px solid #9A4408;
+      position: relative; display: flex; align-items: center; justify-content: center;
+      z-index: 5;
+    }
+    .turntable {
+      width: 40%; height: 40%; border-radius: 50%;
+      background: radial-gradient(circle at 35% 35%, rgba(255,255,255,0.72), rgba(255,255,255,0.32));
+      border: 2px solid rgba(255,255,255,0.85);
+      box-shadow: 0 3px 8px rgba(0,0,0,0.18);
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      text-align: center; color: #5D2E0C; font-size: 10px; font-weight: 800;
+      padding: 2px;
+    }
+
+    /* 擺在圓桌上的 Q 版美食盤（z-index 高於桌面，點擊立刻彈出原始照片） */
+    .table-dish-slot {
+      position: absolute;
+      transform: translate(-50%, -50%);
+      display: flex; flex-direction: column; align-items: center;
+      cursor: pointer; z-index: 16;
+      transition: left 0.45s ease, top 0.45s ease, transform 0.15s;
+    }
+    .table-dish-slot:hover { transform: translate(-50%, -50%) scale(1.1); }
+    .table-dish-slot:active { transform: translate(-50%, -50%) scale(0.92); }
+    .dish-plate {
+      width: 46px; height: 46px; border-radius: 50%;
+      background: radial-gradient(circle at 35% 30%, #FFFFFF, #E5E7EB);
+      box-shadow: 0 4px 0 #9CA3AF, 0 6px 12px rgba(0,0,0,0.3);
+      border: 2px solid #FFFFFF;
+      display: flex; align-items: center; justify-content: center;
+      position: relative;
+      animation: dishPop 0.45s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    }
+    .dish-steam {
+      position: absolute; top: -10px; font-size: 12px;
+      animation: steamRise 1.6s ease-in-out infinite;
+      pointer-events: none;
+    }
+    .dish-photo-badge {
+      position: absolute; bottom: -4px;
+      background: #FF6B35; color: #fff; font-size: 8.5px; font-weight: 800;
+      padding: 1px 5px; border-radius: 7px; border: 1px solid #fff;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+      white-space: nowrap;
+    }
+
+    /* 3D 立體人物座位節點（獨立更新，不因輪詢中斷動畫） */
+    .seat-node {
+      position: absolute; width: 108px;
+      display: flex; flex-direction: column; align-items: center;
+      transform: translate(-50%, -50%);
+      transition: left 0.45s ease, top 0.45s ease;
+      z-index: 22;
+    }
+
+    /* 動畫 1：走進來坐下（從包廂外側走步擺動進入座位並坐下） */
+    .seat-node.anim-entering .char-motion-box {
+      animation: walkInAndSit 1.5s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+    }
+    /* 動畫 2：站起來離開（先站起身揮手，再邁步走出畫面） */
+    .seat-node.anim-leaving .char-motion-box {
+      animation: standUpAndLeave 1.5s cubic-bezier(0.55, 0.085, 0.68, 0.53) forwards;
+    }
+
+    .char-motion-box {
+      position: relative; width: 76px; height: 84px;
+      display: flex; align-items: center; justify-content: center;
+      cursor: pointer;
+      filter: drop-shadow(0 8px 8px rgba(62, 39, 35, 0.3));
+    }
+
+    /* 動畫 3：立體吃飯夾菜動作（手臂舉筷送入嘴裡＋頭部點頭咀嚼＋雙腳微晃） */
+    .char-motion-box .arm-chopsticks {
+      transform-origin: 54px 60px;
+    }
+    .seat-node.anim-eating .arm-chopsticks {
+      animation: chopstickFeed 0.55s ease-in-out 4;
+    }
+    .seat-node.anim-eating .char-head-group {
+      transform-origin: 40px 38px;
+      animation: headChew 0.55s ease-in-out 4;
+    }
+    .seat-node.anim-eating .char-legs-group {
+      animation: legHappy 0.55s ease-in-out 4;
+    }
+
+    /* 走路進場/離場時雙腳交替擺動 */
+    .seat-node.anim-entering .leg-left,
+    .seat-node.anim-leaving .leg-left {
+      transform-origin: 33px 74px;
+      animation: legWalkL 0.28s ease-in-out 6;
+    }
+    .seat-node.anim-entering .leg-right,
+    .seat-node.anim-leaving .leg-right {
+      transform-origin: 47px 74px;
+      animation: legWalkR 0.28s ease-in-out 6;
+    }
+
+    .seat-node.tagged .char-motion-box {
+      filter: drop-shadow(0 0 12px #F59E0B);
+      animation: bounce 0.6s ease 2;
+    }
+
+    /* 角色頭頂漫畫對話框 */
+    .speech-bubble {
+      position: absolute; bottom: 100%; left: 50%; transform: translateX(-50%);
+      background: #fff; color: var(--text);
+      padding: 5px 9px; border-radius: 12px;
+      font-size: 11.5px; font-weight: 700; line-height: 1.3;
+      max-width: 155px; width: max-content; word-break: break-word;
+      box-shadow: 0 4px 14px rgba(0,0,0,0.16);
+      border: 1.5px solid var(--primary);
+      z-index: 35; animation: popIn 0.2s ease-out;
+    }
+    .speech-bubble::after {
+      content: ""; position: absolute; top: 100%; left: 50%; margin-left: -6px;
+      border-width: 6px; border-style: solid;
+      border-color: var(--primary) transparent transparent transparent;
+    }
+    .tag-highlight { color: #E85A2A; background: #FFF0E5; padding: 0 3px; border-radius: 4px; }
+
+    /* 餐點與卡路里標籤（點擊也可看原圖） */
+    .food-badge {
+      margin-top: -5px; z-index: 25;
+      background: #FFFBEB; border: 1.5px solid #F59E0B;
+      border-radius: 11px; padding: 2px 7px;
+      display: flex; align-items: center; gap: 3px;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.12);
+      font-size: 10px; font-weight: 800; color: #B45309;
+      white-space: nowrap; cursor: pointer;
+    }
+    .seat-name-tag {
+      margin-top: 2px; background: rgba(62, 39, 35, 0.85); color: #fff;
+      padding: 2px 8px; border-radius: 9px; font-size: 10.5px; font-weight: 700;
+      max-width: 94px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    .seat-node.is-me .seat-name-tag {
+      background: linear-gradient(135deg, #FF7849, #E85A2A);
+    }
+
+    .float-emoji {
+      position: absolute; top: -12px; font-size: 18px; pointer-events: none;
+      animation: floatUp 1.3s ease-out forwards; z-index: 40;
+    }
+
+    /* 底部操作與聊天區 */
+    .bottom-dock {
+      background: #fff; border-top: 1px solid var(--border);
+      padding: 7px 10px 8px; flex-shrink: 0; z-index: 35;
+    }
+    .action-strip {
+      display: flex; gap: 6px; margin-bottom: 6px; overflow-x: auto;
+      padding-bottom: 2px; -webkit-overflow-scrolling: touch;
+    }
+    .action-strip::-webkit-scrollbar { display: none; }
+    .action-pill {
+      padding: 6px 11px; border-radius: 18px; font-size: 11.5px; font-weight: 700;
+      border: none; cursor: pointer; white-space: nowrap;
+      display: inline-flex; align-items: center; gap: 4px; flex-shrink: 0;
+    }
+    .pill-photo { background: #FFF0E5; color: #E85A2A; border: 1px solid #FFCCB3; }
+    .pill-eat { background: #ECFDF5; color: #059669; border: 1px solid #A7F3D0; }
+    .pill-game-rps { background: #EEF2FF; color: #4F46E5; border: 1px solid #C7D2FE; }
+    .pill-game-num { background: #FEF3C7; color: #B45309; border: 1px solid #FDE68A; }
+    .pill-tag { background: #F3F4F6; color: #374151; }
+
+    .mini-chat-log {
+      max-height: 58px; overflow-y: auto; font-size: 11.5px;
+      background: #FAF6F2; border-radius: 10px; padding: 5px 8px;
+      margin-bottom: 6px; line-height: 1.4;
+    }
+    .chat-line { margin-bottom: 2px; }
+    .chat-sender { font-weight: 700; color: var(--primary-dark); }
+
+    .chat-input-row { display: flex; gap: 6px; position: relative; }
+    .chat-input {
+      flex: 1; padding: 8px 12px; border-radius: 20px;
+      border: 1.5px solid var(--border); font-size: 14px; outline: none;
+    }
+    .chat-input:focus { border-color: var(--primary); }
+    .send-btn {
+      padding: 0 14px; border-radius: 20px; background: var(--primary);
+      color: #fff; border: none; font-weight: 700; font-size: 13.5px; cursor: pointer;
+    }
+
+    .mention-popup {
+      position: absolute; bottom: 105%; left: 0; right: 0;
+      background: #fff; border: 1.5px solid var(--border);
+      border-radius: 12px; box-shadow: 0 -4px 16px rgba(0,0,0,0.1);
+      padding: 5px; display: flex; gap: 6px; flex-wrap: wrap; z-index: 50;
+    }
+    .mention-item {
+      padding: 5px 10px; background: var(--secondary); color: var(--primary-dark);
+      border-radius: 8px; font-size: 12px; font-weight: 700; border: none; cursor: pointer;
+    }
+
+    /* ================= 3. 通用彈窗 ================= */
+    .modal-backdrop {
+      position: fixed; inset: 0; background: rgba(0,0,0,0.62);
+      display: flex; align-items: center; justify-content: center;
+      padding: 16px; z-index: 100;
+    }
+    .modal-card {
+      width: 100%; max-width: 395px; max-height: 88dvh; overflow-y: auto;
+      background: #fff; border-radius: 22px; padding: 18px;
+      box-shadow: 0 12px 32px rgba(0,0,0,0.28);
+    }
+    .preset-foods {
+      display: grid; grid-template-columns: repeat(3, 1fr); gap: 7px; margin: 10px 0;
+    }
+    .preset-food-btn {
+      padding: 7px 4px; border-radius: 11px; border: 1.5px solid var(--border);
+      background: #FFFDFB; text-align: center; cursor: pointer; font-size: 11.5px; font-weight: 700;
+    }
+
+    .game-arena {
+      background: #FFF8F1; border: 2px solid #FDE68A; border-radius: 16px;
+      padding: 14px; margin: 10px 0; text-align: center;
+    }
+    .shake-hand {
+      display: inline-block; font-size: 46px;
+      animation: handShake 0.45s ease-in-out infinite;
+    }
+    .player-chip-grid {
+      display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0 12px;
+    }
+    .player-chip {
+      padding: 6px 11px; border-radius: 20px; font-size: 12px; font-weight: 700;
+      border: 1.5px solid var(--border); background: #fff; cursor: pointer;
+    }
+    .player-chip.selected {
+      background: #EEF2FF; border-color: #6366F1; color: #4338CA;
+    }
+    .game-result-row {
+      display: flex; justify-content: space-between; align-items: center;
+      padding: 8px 10px; border-radius: 10px; background: #fff;
+      margin-bottom: 6px; border: 1px solid var(--border); font-size: 13px; font-weight: 700;
+    }
+    .game-result-row.loser {
+      background: #FEE2E2; border-color: #F87171; color: #B91C1C;
+      animation: pulseAlert 0.6s ease 3;
+    }
+    .game-result-row.picked {
+      background: #FEF3C7; border-color: #F59E0B; color: #B45309;
+      transform: scale(1.03);
+    }
+
+    /* ================= 關鍵動畫定義 ================= */
+    @keyframes walkInAndSit {
+      0% {
+        opacity: 0;
+        transform: translate(-90px, -110px) scale(0.72);
+      }
+      28% {
+        opacity: 1;
+        transform: translate(-55px, -68px) rotate(-8deg) scale(0.88);
+      }
+      56% {
+        transform: translate(-25px, -34px) rotate(8deg) scale(0.96);
+      }
+      80% {
+        transform: translate(0px, -14px) rotate(0deg) scale(1.04);
+      }
+      100% {
+        opacity: 1;
+        transform: translate(0px, 0px) scale(1);
+      }
+    }
+
+    @keyframes standUpAndLeave {
+      0% {
+        opacity: 1;
+        transform: translate(0px, 0px) scale(1);
+      }
+      22% {
+        transform: translate(0px, -18px) scale(1.08);
+      }
+      52% {
+        opacity: 0.95;
+        transform: translate(35px, -55px) rotate(9deg) scale(0.95);
+      }
+      100% {
+        opacity: 0;
+        transform: translate(110px, -120px) rotate(-9deg) scale(0.7);
+      }
+    }
+
+    @keyframes legWalkL {
+      0%, 100% { transform: rotate(-22deg); }
+      50% { transform: rotate(22deg); }
+    }
+    @keyframes legWalkR {
+      0%, 100% { transform: rotate(22deg); }
+      50% { transform: rotate(-22deg); }
+    }
+
+    @keyframes chopstickFeed {
+      0%, 100% { transform: rotate(0deg) translate(0, 0); }
+      45% { transform: rotate(-44deg) translate(-7px, -14px); }
+      75% { transform: rotate(-36deg) translate(-5px, -11px); }
+    }
+
+    @keyframes headChew {
+      0%, 100% { transform: translateY(0) scale(1); }
+      45% { transform: translateY(-4px) scale(1.04); }
+      72% { transform: translateY(2px) scale(0.96, 1.04); }
+    }
+
+    @keyframes legHappy {
+      0%, 100% { transform: translateY(0); }
+      50% { transform: translateY(-2px); }
+    }
+
+    @keyframes dishPop {
+      0% { transform: scale(0.1); opacity: 0; }
+      70% { transform: scale(1.18); opacity: 1; }
+      100% { transform: scale(1); opacity: 1; }
+    }
+
+    @keyframes steamRise {
+      0%, 100% { transform: translateY(0) scale(0.9); opacity: 0.4; }
+      50% { transform: translateY(-6px) scale(1.2); opacity: 0.95; }
+    }
+
+    @keyframes handShake {
+      0%, 100% { transform: rotate(-15deg) translateY(0); }
+      50% { transform: rotate(20deg) translateY(-10px); }
+    }
+    @keyframes pulseAlert {
+      0%, 100% { transform: scale(1); }
+      50% { transform: scale(1.04); }
+    }
+    @keyframes floatUp {
+      0% { opacity: 1; transform: translateY(0) scale(0.8); }
+      100% { opacity: 0; transform: translateY(-44px) scale(1.3); }
+    }
+    @keyframes popIn {
+      0% { opacity: 0; transform: translate(-50%, 6px) scale(0.9); }
+      100% { opacity: 1; transform: translate(-50%, 0) scale(1); }
+    }
+    @keyframes bounce {
+      0%, 100% { transform: translateY(0); }
+      50% { transform: translateY(-8px); }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- ==================== 1. 入口大廳 ==================== -->
+  <div id="entry-screen">
+    <div class="entry-card">
+      <div class="hero-banner">
+        <div class="hero-emojis">🍱 🍜 🧋</div>
+        <h1 class="hero-title">一起吃三餐・3D立體圓桌</h1>
+        <p class="hero-sub">3D 立體公仔走路入座・舉筷吃飯動畫・桌上Q版美食看原圖</p>
+      </div>
+
+      <div class="entry-body">
+        <div class="tabs">
+          <button type="button" class="tab-btn active" id="tab-join" onclick="switchMode('join')">🚪 輸入邀請碼入桌</button>
+          <button type="button" class="tab-btn" id="tab-host" onclick="switchMode('host')">👑 我要開包廂發邀請</button>
+        </div>
+
+        <div class="section-header">
+          <span id="step1-title">步驟 1：輸入 4 位數包廂邀請碼</span>
+          <span class="section-hint" id="step1-hint">請輸入邀請函上的 4 個數字</span>
+        </div>
+
+        <div class="pin-box-wrap">
+          <input type="tel" inputmode="numeric" maxlength="1" class="pin-input" id="pin-0" oninput="handlePinInput(0, this)" onkeydown="handlePinKey(0, event)" />
+          <input type="tel" inputmode="numeric" maxlength="1" class="pin-input" id="pin-1" oninput="handlePinInput(1, this)" onkeydown="handlePinKey(1, event)" />
+          <input type="tel" inputmode="numeric" maxlength="1" class="pin-input" id="pin-2" oninput="handlePinInput(2, this)" onkeydown="handlePinKey(2, event)" />
+          <input type="tel" inputmode="numeric" maxlength="1" class="pin-input" id="pin-3" oninput="handlePinInput(3, this)" onkeydown="handlePinKey(3, event)" />
+        </div>
+
+        <div id="host-panel" class="hidden">
+          <div class="section-header">
+            <span>選擇今日聚餐時段</span>
+            <button type="button" class="line-autofill-btn" onclick="randomPin()">🎲 隨機 4 碼</button>
+          </div>
+          <div class="meal-grid">
+            <button type="button" class="meal-btn" onclick="selectMeal(this, '元氣早餐 🥪')">🥪 早餐</button>
+            <button type="button" class="meal-btn active" onclick="selectMeal(this, '美味午餐 🍱')">🍱 午餐</button>
+            <button type="button" class="meal-btn" onclick="selectMeal(this, '豐盛晚餐 🍲')">🍲 晚餐</button>
+            <button type="button" class="meal-btn" onclick="selectMeal(this, '罪惡宵夜 🍢')">🍢 宵夜</button>
+          </div>
+
+          <div class="invite-box" id="invite-preview"></div>
+          <div style="display:grid; grid-template-columns: 1fr 1.3fr; gap: 8px; margin-bottom: 14px;">
+            <button type="button" class="btn btn-outline" style="padding:10px;" onclick="copyInvite()">📋 複製邀請函</button>
+            <button type="button" class="btn btn-line" style="padding:10px;" onclick="shareToLine()">💬 傳送 LINE 邀請</button>
+          </div>
+        </div>
+
+        <div class="section-header">
+          <span>步驟 2：LINE 暱稱與 3D 立體角色</span>
+          <button type="button" class="line-autofill-btn" onclick="fillLineProfile()">🟢 帶入記憶的 LINE 資料</button>
+        </div>
+
+        <div class="profile-card">
+          <div class="avatar-preview-wrap">
+            <div id="preview-avatar-svg"></div>
+            <button type="button" class="dice-btn" title="隨機換造型" onclick="randomizeAvatar()">🎲</button>
+          </div>
+          <div class="profile-fields">
+            <input type="text" id="nickname-input" class="text-input" placeholder="輸入您的 LINE 顯示名稱" maxlength="12" oninput="saveDraftProfile()" />
+            <div class="gender-group">
+              <button type="button" class="gender-btn active" id="g-female" onclick="setGender('female')">👧 女生</button>
+              <button type="button" class="gender-btn" id="g-male" onclick="setGender('male')">👦 男生</button>
+              <button type="button" class="gender-btn" id="g-neutral" onclick="setGender('neutral')">🐻 中性</button>
+            </div>
+          </div>
+        </div>
+
+        <button type="button" class="btn btn-primary" style="width:100%; padding:14px; font-size:16px;" onclick="enterRoom()">
+          🥢 驗證邀請碼並走進圓桌入座！
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== 2. 3D 立體圓桌包廂 ==================== -->
+  <div id="room-screen" class="hidden">
+    <div class="room-topbar">
+      <div class="room-badge">
+        <span class="status-dot" id="cloud-dot"></span>
+        <span id="room-title-label">包廂 #0000</span>
+        <span style="color:var(--muted); font-weight:500;" id="online-count-label">(1人在桌)</span>
+      </div>
+      <div class="top-actions">
+        <button type="button" class="mini-btn" onclick="shareToLine()">➕ 邀好友</button>
+        <button type="button" class="mini-btn leave" onclick="leaveRoom()">🚶 站起離開</button>
+      </div>
+    </div>
+
+    <div class="table-stage" id="table-stage">
+      <div class="scene-container">
+        <!-- 3D 立體大圓桌 -->
+        <div class="wooden-table">
+          <div class="turntable">
+            <div id="table-meal-label" style="font-size:11px;">🍱 美味午餐</div>
+            <div style="font-size:9px; opacity:0.85; margin-top:2px;">點桌上Q版食物看原圖</div>
+          </div>
+        </div>
+        <!-- 擺在圓桌桌面上的 Q 版美食盤圖層 -->
+        <div id="table-dishes-layer"></div>
+        <!-- 圍繞圓桌的 3D 立體人物座位圖層 -->
+        <div id="seats-layer"></div>
+      </div>
+    </div>
+
+    <div class="bottom-dock">
+      <div class="action-strip" id="quick-action-bar">
+        <button type="button" class="action-pill pill-photo" onclick="openFoodModal()">📸 拍照/相簿上菜</button>
+        <button type="button" class="action-pill pill-eat" onclick="triggerEat()">🥢 舉筷吃一口！</button>
+        <button type="button" class="action-pill pill-game-rps" onclick="openRpsModal()">✌️ 剪刀石頭布</button>
+        <button type="button" class="action-pill pill-game-num" onclick="openCountModal()">☝️ 全桌數支</button>
+        <div id="tag-pills-container" style="display:flex; gap:6px;"></div>
+      </div>
+
+      <div class="mini-chat-log" id="chat-log"></div>
+
+      <div class="chat-input-row">
+        <div class="mention-popup hidden" id="mention-popup"></div>
+        <input type="text" id="chat-input" class="chat-input" placeholder="說點什麼... 輸入 @ 可標記桌上好友" oninput="handleChatInput(this)" onkeydown="if(event.key==='Enter') sendChat()" />
+        <button type="button" class="send-btn" onclick="sendChat()">送出</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== 3. 拍照 / 相簿上菜＋精準名稱與熱量確認彈窗 ==================== -->
+  <div id="food-modal" class="modal-backdrop hidden">
+    <div class="modal-card">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+        <h3 style="margin:0; font-size:16px;">🍽️ 上傳餐點擺上圓桌（轉 Q 版＋精準熱量）</h3>
+        <button type="button" onclick="closeFoodModal()" style="border:none; background:none; font-size:20px; cursor:pointer;">✕</button>
+      </div>
+
+      <div style="display:grid; grid-template-columns: 1fr 1fr; gap:8px; margin-bottom:10px;">
+        <label class="btn btn-primary" style="padding:10px 6px; cursor:pointer; font-size:13px;">
+          📷 相機現場拍照
+          <input type="file" accept="image/*" capture="environment" style="display:none;" onchange="handlePhotoSelected(this)" />
+        </label>
+        <label class="btn btn-outline" style="padding:10px 6px; cursor:pointer; font-size:13px; border-color:var(--primary); color:var(--primary-dark);">
+          🖼️ 從相簿選照片
+          <input type="file" accept="image/*" style="display:none;" onchange="handlePhotoSelected(this)" />
+        </label>
+      </div>
+
+      <!-- 照片即時上桌後的精準名稱與熱量微調區 -->
+      <div id="photo-confirm-box" class="hidden" style="background:#FFF8F1; border:1.5px solid #FDBA74; border-radius:14px; padding:10px; margin-bottom:10px;">
+        <div style="display:flex; gap:10px; align-items:center; margin-bottom:8px;">
+          <img id="draft-food-thumb" src="" alt="原圖預覽" style="width:66px; height:66px; object-fit:cover; border-radius:10px; border:2px solid #fff; box-shadow:0 2px 6px rgba(0,0,0,0.15);" />
+          <div style="flex:1;">
+            <div style="font-size:11px; color:#059669; font-weight:800; margin-bottom:4px;">✅ 已自動端上圓桌！可在此修改正確名稱與熱量：</div>
+            <input type="text" id="confirm-food-name" class="text-input" style="margin-bottom:5px; padding:6px 8px; font-size:13px;" placeholder="輸入實際食物名稱（如：排骨便當）" />
+            <div style="display:flex; gap:6px; align-items:center;">
+              <input type="number" id="confirm-food-cal" class="text-input" style="margin-bottom:0; padding:6px 8px; font-size:13px; width:95px;" placeholder="卡路里" />
+              <span style="font-size:12px; font-weight:700; color:var(--muted);">kcal</span>
+              <select id="confirm-food-type" style="padding:6px; border-radius:8px; border:1px solid var(--border); font-size:12px; font-weight:700;">
+                <option value="bento">🍱 便當/飯類</option>
+                <option value="ramen">🍜 麵食/湯麵</option>
+                <option value="toast">🍔 漢堡/吐司</option>
+                <option value="boba">🧋 飲料/咖啡</option>
+                <option value="salad">🥗 輕食/沙拉</option>
+                <option value="hotpot">🍲 火鍋/熱炒</option>
+              </select>
+            </div>
+          </div>
+        </div>
+        <button type="button" class="btn btn-primary" style="width:100%; padding:10px;" onclick="confirmAndServeFood()">
+          ✅ 更新名稱與熱量並完成上菜！
+        </button>
+      </div>
+
+      <div style="font-size:12px; font-weight:700; color:var(--muted); margin-top:4px;">一鍵套用常見料理精準名稱與熱量：</div>
+      <div class="preset-foods">
+        <button type="button" class="preset-food-btn" onclick="applyFoodPreset('招牌雞腿便當', 780, 'bento')">🍱 雞腿便當<br><span style="color:#D97706;">780 kcal</span></button>
+        <button type="button" class="preset-food-btn" onclick="applyFoodPreset('豚骨叉燒拉麵', 650, 'ramen')">🍜 叉燒拉麵<br><span style="color:#D97706;">650 kcal</span></button>
+        <button type="button" class="preset-food-btn" onclick="applyFoodPreset('牛肉起司漢堡', 560, 'toast')">🍔 牛肉漢堡<br><span style="color:#D97706;">560 kcal</span></button>
+        <button type="button" class="preset-food-btn" onclick="applyFoodPreset('珍珠鮮奶茶', 380, 'boba')">🧋 珍珠奶茶<br><span style="color:#D97706;">380 kcal</span></button>
+        <button type="button" class="preset-food-btn" onclick="applyFoodPreset('舒肥雞胸沙拉', 310, 'salad')">🥗 雞胸沙拉<br><span style="color:#D97706;">310 kcal</span></button>
+        <button type="button" class="preset-food-btn" onclick="applyFoodPreset('豪華海鮮火鍋', 850, 'hotpot')">🍲 海鮮火鍋<br><span style="color:#D97706;">850 kcal</span></button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== 4. 點擊食物查看原始照片彈窗 ==================== -->
+  <div id="photo-viewer-modal" class="modal-backdrop hidden" onclick="closePhotoViewer()">
+    <div class="modal-card" style="text-align:center;" onclick="event.stopPropagation()">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+        <h3 id="viewer-title" style="margin:0; font-size:16px;">📸 餐點原始照片</h3>
+        <button type="button" onclick="closePhotoViewer()" style="border:none; background:none; font-size:20px; cursor:pointer;">✕</button>
+      </div>
+      <img id="viewer-img" src="" alt="原始餐點照片" style="width:100%; max-height:330px; object-fit:contain; background:#18181B; border-radius:14px; margin-bottom:10px; border:2px solid var(--border);" />
+      <p id="viewer-desc" style="font-size:14px; font-weight:800; color:var(--primary-dark); margin:0;"></p>
+    </div>
+  </div>
+
+  <!-- ==================== 5. 剪刀石頭布小遊戲彈窗 ==================== -->
+  <div id="rps-modal" class="modal-backdrop hidden">
+    <div class="modal-card">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+        <h3 style="margin:0; font-size:16px;">✌️ 圓桌剪刀石頭布（抓出輸家！）</h3>
+        <button type="button" onclick="closeRpsModal()" style="border:none; background:none; font-size:20px; cursor:pointer;">✕</button>
+      </div>
+      <p style="font-size:12px; color:var(--muted); margin:0 0 8px;">選擇要邀請「全桌一起猜拳」或只點選「特定幾位好友」對決：</p>
+
+      <div style="display:flex; gap:6px; margin-bottom:6px;">
+        <button type="button" class="mini-btn" style="background:#EEF2FF; color:#4338CA;" onclick="selectAllRpsPlayers(true)">✅ 全桌全部人員</button>
+        <button type="button" class="mini-btn" style="background:#FFF0E5; color:#E85A2A;" onclick="selectAllRpsPlayers(false)">🔄 重新勾選幾位</button>
+      </div>
+      <div class="player-chip-grid" id="rps-player-list"></div>
+
+      <button type="button" class="btn btn-primary" style="width:100%; padding:11px; margin-bottom:8px;" onclick="startRpsGame()">
+        ✊ ✌️ 🖐️ 開始猜拳動畫！
+      </button>
+
+      <div id="rps-arena" class="game-arena hidden"></div>
+    </div>
+  </div>
+
+  <!-- ==================== 6. 全桌數支小遊戲彈窗 ==================== -->
+  <div id="count-modal" class="modal-backdrop hidden">
+    <div class="modal-card">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+        <h3 style="margin:0; font-size:16px;">☝️ 全桌數支（看看最後數到誰！）</h3>
+        <button type="button" onclick="closeCountModal()" style="border:none; background:none; font-size:20px; cursor:pointer;">✕</button>
+      </div>
+      <p style="font-size:12px; color:var(--muted); margin:0 0 10px;">全桌每個人隨機伸出 0～5 根手指，加總總支數後順時針一個一個點名，看看最後數到誰！</p>
+
+      <button type="button" class="btn btn-primary" style="width:100%; padding:12px; margin-bottom:8px;" onclick="startCountGame()">
+        ☝️ 全桌亮手指並開始數支！
+      </button>
+
+      <div id="count-arena" class="game-arena hidden"></div>
+    </div>
+  </div>
+
+  <script>
+    // ==================== Firebase 雲端即時資料庫連線 ====================
+    let db = null;
+    let roomRef = null;
+    let useCloud = false;
+
+    try {
+      const firebaseConfig = {
+        databaseURL: "https://eat-room-535a6-default-rtdb.firebaseio.com/"
+      };
+      if (window.firebase) {
+        firebase.initializeApp(firebaseConfig);
+        db = firebase.database();
+        useCloud = true;
+      }
+    } catch (e) {
+      useCloud = false;
+    }
+
+    const state = {
+      mode: 'join',
+      pin: '',
+      meal: '美味午餐 🍱',
+      gender: 'female',
+      avatarSeed: Math.floor(Math.random() * 100),
+      userId: 'u_' + Math.random().toString(36).slice(2, 9),
+      nickname: '',
+      food: null, // { name, cal, type, imgUrl }
+      draftImgUrl: '',
+      bites: 0,
+      bubbleText: '',
+      bubbleTime: 0,
+      taggedUntil: 0,
+      eatingUntil: 0,
+      enteringUntil: 0,
+      leaving: false,
+      members: {},
+      knownMemberIds: new Set(),
+      messages: [],
+      lastGameId: ''
+    };
+
+    let syncTimer = null;
+
+    window.addEventListener('DOMContentLoaded', () => {
+      const params = new URLSearchParams(window.location.search);
+      const urlRoom = params.get('room');
+      const urlMeal = params.get('meal');
+
+      if (urlRoom && /^\d{4}$/.test(urlRoom)) {
+        setPinDigits(urlRoom);
+      }
+      if (urlMeal) {
+        state.meal = decodeURIComponent(urlMeal);
+      }
+
+      const savedName = localStorage.getItem('eat_line_name');
+      const savedGender = localStorage.getItem('eat_line_gender');
+      if (savedName) {
+        document.getElementById('nickname-input').value = savedName;
+        state.nickname = savedName;
+      }
+      if (savedGender) {
+        setGender(savedGender, false);
+      }
+
+      renderAvatarPreview();
+      updateInvitePreview();
+    });
+
+    function switchMode(mode) {
+      state.mode = mode;
+      document.getElementById('tab-join').classList.toggle('active', mode === 'join');
+      document.getElementById('tab-host').classList.toggle('active', mode === 'host');
+      document.getElementById('host-panel').classList.toggle('hidden', mode !== 'host');
+
+      if (mode === 'host') {
+        document.getElementById('step1-title').textContent = '步驟 1：設定今日 4 位數包廂密碼';
+        document.getElementById('step1-hint').textContent = '自訂 4 個數字傳給好友';
+        if (getPin().length < 4) randomPin();
+      } else {
+        document.getElementById('step1-title').textContent = '步驟 1：輸入 4 位數包廂邀請碼';
+        document.getElementById('step1-hint').textContent = '請輸入邀請函上的 4 個數字';
+      }
+      updateInvitePreview();
+    }
+
+    function handlePinInput(idx, el) {
+      el.value = el.value.replace(/\D/g, '').slice(0, 1);
+      if (el.value && idx < 3) {
+        document.getElementById('pin-' + (idx + 1)).focus();
+      }
+      updateInvitePreview();
+    }
+
+    function handlePinKey(idx, e) {
+      if (e.key === 'Backspace' && !e.target.value && idx > 0) {
+        document.getElementById('pin-' + (idx - 1)).focus();
+      }
+    }
+
+    function getPin() {
+      return [0,1,2,3].map(i => document.getElementById('pin-' + i).value).join('');
+    }
+
+    function setPinDigits(code) {
+      for (let i = 0; i < 4; i++) {
+        document.getElementById('pin-' + i).value = code[i] || '';
+      }
+      updateInvitePreview();
+    }
+
+    function randomPin() {
+      const code = String(Math.floor(1000 + Math.random() * 9000));
+      setPinDigits(code);
+    }
+
+    function selectMeal(btn, mealText) {
+      document.querySelectorAll('.meal-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      state.meal = mealText;
+      updateInvitePreview();
+    }
+
+    function getShareUrl() {
+      const pin = getPin() || '8888';
+      const base = window.location.origin + window.location.pathname;
+      return `${base}?room=${pin}&meal=${encodeURIComponent(state.meal)}`;
+    }
+
+    function updateInvitePreview() {
+      const pin = getPin() || '____';
+      const url = getShareUrl();
+      const text = `🍽️【一起吃三餐・3D立體圓桌包廂】\n這餐我們一起吃「${state.meal}」吧！\n🔑 專屬包廂邀請碼：【 ${pin} 】\n👉 點網址直接走進圓桌入座：\n${url}`;
+      const box = document.getElementById('invite-preview');
+      if (box) box.textContent = text;
+    }
+
+    function copyInvite() {
+      const pin = getPin();
+      if (pin.length !== 4) { alert('請先設定 4 個數字的包廂邀請碼！'); return; }
+      const text = document.getElementById('invite-preview').textContent;
+      if (navigator.clipboard) {
+        navigator.clipboard.writeText(text).then(() => alert('✅ 已複製 LINE
