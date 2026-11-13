@@ -936,4 +936,935 @@
       if (pin.length !== 4) { alert('請先設定 4 個數字的包廂邀請碼！'); return; }
       const text = document.getElementById('invite-preview').textContent;
       if (navigator.clipboard) {
-        navigator.clipboard.writeText(text).then(() => alert('✅ 已複製 LINE
+        navigator.clipboard.writeText(text).then(() => alert('✅ 已複製 LINE 邀請函與網址！可以直接貼給朋友囉！'));
+      } else {
+        alert(text);
+      }
+    }
+
+    function shareToLine() {
+      const pin = state.pin || getPin();
+      if (pin.length !== 4) { alert('請先輸入 4 個數字的包廂邀請碼！'); return; }
+      const url = `${window.location.origin}${window.location.pathname}?room=${pin}&meal=${encodeURIComponent(state.meal)}`;
+      const msg = `🍽️【一起吃三餐・3D立體圓桌包廂】\n這餐一起吃「${state.meal}」吧！\n🔑 包廂邀請碼：【 ${pin} 】\n👉 點這裡直接入桌：\n${url}`;
+      const lineUrl = `https://line.me/R/msg/text/?${encodeURIComponent(msg)}`;
+      window.open(lineUrl, '_blank');
+    }
+
+    function setGender(g, rerender = true) {
+      state.gender = g;
+      document.getElementById('g-female').classList.toggle('active', g === 'female');
+      document.getElementById('g-male').classList.toggle('active', g === 'male');
+      document.getElementById('g-neutral').classList.toggle('active', g === 'neutral');
+      saveDraftProfile();
+      if (rerender) randomizeAvatar();
+    }
+
+    function randomizeAvatar() {
+      state.avatarSeed = Math.floor(Math.random() * 999);
+      renderAvatarPreview();
+    }
+
+    function saveDraftProfile() {
+      const name = document.getElementById('nickname-input').value.trim();
+      state.nickname = name;
+      if (name) localStorage.setItem('eat_line_name', name);
+      localStorage.setItem('eat_line_gender', state.gender);
+    }
+
+    function fillLineProfile() {
+      const savedName = localStorage.getItem('eat_line_name');
+      if (savedName) {
+        document.getElementById('nickname-input').value = savedName;
+        state.nickname = savedName;
+        randomizeAvatar();
+        alert(`🟢 已帶入您上次使用的 LINE 暱稱「${savedName}」與專屬 3D 角色！`);
+      } else {
+        const demoNames = ['阿明', '小美', '吃貨小王', '珍奶控', '美食家'];
+        const pick = demoNames[Math.floor(Math.random() * demoNames.length)];
+        document.getElementById('nickname-input').value = pick;
+        state.nickname = pick;
+        saveDraftProfile();
+        alert('💡 首次使用請輸入您的 LINE 暱稱與性別，系統會自動記憶！');
+      }
+    }
+
+    // ==================== 3D 立體公仔（含可動雙腳走路與舉筷吃飯手臂） ====================
+    function generate3DCharacterSvg(gender, seed, width = 76, height = 84) {
+      const uid = `${gender}_${seed}_${Math.random().toString(36).slice(2,6)}`;
+      const skinPalettes = [
+        ['#FFF0DB', '#F5CBA7', '#D4AC87'],
+        ['#FFE5C4', '#EDBB99', '#CA9A76'],
+        ['#F8D5B0', '#E0AC69', '#B98242']
+      ];
+      const shirtPalettes = [
+        ['#FF9E7D', '#FF6B35', '#C0392B'],
+        ['#60A5FA', '#2563EB', '#1E3A8A'],
+        ['#34D399', '#059669', '#064E3B'],
+        ['#FBBF24', '#D97706', '#78350F'],
+        ['#C084FC', '#7C3AED', '#4C1D95']
+      ];
+      const skin = skinPalettes[seed % skinPalettes.length];
+      const shirt = shirtPalettes[(seed * 3) % shirtPalettes.length];
+
+      const defs = `
+        <defs>
+          <radialGradient id="skin_${uid}" cx="35%" cy="30%" r="70%">
+            <stop offset="0%" stop-color="${skin[0]}"/>
+            <stop offset="65%" stop-color="${skin[1]}"/>
+            <stop offset="100%" stop-color="${skin[2]}"/>
+          </radialGradient>
+          <linearGradient id="body_${uid}" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stop-color="${shirt[0]}"/>
+            <stop offset="55%" stop-color="${shirt[1]}"/>
+            <stop offset="100%" stop-color="${shirt[2]}"/>
+          </linearGradient>
+          <radialGradient id="eye_${uid}" cx="35%" cy="30%" r="65%">
+            <stop offset="0%" stop-color="#4B5563"/>
+            <stop offset="100%" stop-color="#111827"/>
+          </radialGradient>
+        </defs>
+      `;
+
+      // 可動雙腳（走路進場/離場時擺動，入座時自然垂放）
+      const legsGroup = `
+        <g class="char-legs-group">
+          <g class="leg-left">
+            <rect x="27" y="72" width="10" height="12" rx="5" fill="#1E293B"/>
+            <ellipse cx="32" cy="84" rx="6.5" ry="3.8" fill="#FF7849"/>
+          </g>
+          <g class="leg-right">
+            <rect x="43" y="72" width="10" height="12" rx="5" fill="#1E293B"/>
+            <ellipse cx="48" cy="84" rx="6.5" ry="3.8" fill="#FF7849"/>
+          </g>
+        </g>
+      `;
+
+      // 舉筷子的立體右手臂（配合 CSS 動畫夾菜送入口中）
+      const chopsticksArm = `
+        <g class="arm-chopsticks">
+          <path d="M53 54 Q65 56 62 66 Q56 70 50 62 Z" fill="url(#body_${uid})"/>
+          <circle cx="60" cy="63" r="5" fill="url(#skin_${uid})"/>
+          <line x1="63" y1="65" x2="36" y2="50" stroke="#D97706" stroke-width="2.2" stroke-linecap="round"/>
+          <line x1="62" y1="67" x2="35" y2="54" stroke="#B45309" stroke-width="2.2" stroke-linecap="round"/>
+          <circle cx="37" cy="52" r="3.4" fill="#FF6B35"/>
+        </g>
+      `;
+
+      if (gender === 'neutral') {
+        const furs = [
+          ['#FBBF24', '#D97706', '#92400E'],
+          ['#F472B6', '#DB2777', '#831843'],
+          ['#93C5FD', '#3B82F6', '#1E3A8A']
+        ];
+        const fur = furs[seed % furs.length];
+        return `<svg width="${width}" height="${height}" viewBox="0 0 80 90">
+          <defs>
+            <radialGradient id="fur_${uid}" cx="35%" cy="28%" r="70%">
+              <stop offset="0%" stop-color="${fur[0]}"/>
+              <stop offset="65%" stop-color="${fur[1]}"/>
+              <stop offset="100%" stop-color="${fur[2]}"/>
+            </radialGradient>
+            <linearGradient id="body_${uid}" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stop-color="${fur[0]}"/>
+              <stop offset="100%" stop-color="${fur[2]}"/>
+            </linearGradient>
+            <radialGradient id="skin_${uid}" cx="35%" cy="30%" r="70%">
+              <stop offset="0%" stop-color="#FEF3C7"/>
+              <stop offset="100%" stop-color="#FDE68A"/>
+            </radialGradient>
+          </defs>
+          ${legsGroup}
+          <path d="M21 76 C21 56, 59 56, 59 76 Z" fill="url(#fur_${uid})"/>
+          <ellipse cx="40" cy="68" rx="11" ry="8" fill="#FEF3C7" opacity="0.85"/>
+          <ellipse cx="22" cy="63" rx="5.5" ry="7" transform="rotate(20 22 63)" fill="url(#fur_${uid})"/>
+          <g class="char-head-group">
+            <circle cx="22" cy="21" r="10" fill="url(#fur_${uid})"/>
+            <circle cx="58" cy="21" r="10" fill="url(#fur_${uid})"/>
+            <circle cx="22" cy="21" r="5" fill="#FDE68A"/>
+            <circle cx="58" cy="21" r="5" fill="#FDE68A"/>
+            <ellipse cx="40" cy="38" rx="23" ry="21" fill="url(#fur_${uid})"/>
+            <ellipse cx="40" cy="43" rx="11" ry="8.5" fill="#FEF3C7"/>
+            <circle cx="31" cy="35" r="3.4" fill="#1F2937"/>
+            <circle cx="49" cy="35" r="3.4" fill="#1F2937"/>
+            <circle cx="30" cy="33.8" r="1.2" fill="#FFF"/>
+            <circle cx="48" cy="33.8" r="1.2" fill="#FFF"/>
+            <ellipse cx="40" cy="40" rx="4" ry="2.8" fill="#3E2723"/>
+            <path d="M35 45 Q40 50 45 45" stroke="#3E2723" stroke-width="2.2" fill="none" stroke-linecap="round"/>
+          </g>
+          ${chopsticksArm}
+        </svg>`;
+      }
+
+      const isFemale = gender === 'female';
+      const hairPalettesF = [
+        ['#6D4C41', '#3E2723'],
+        ['#F59E0B', '#B45309'],
+        ['#EC4899', '#9D174D'],
+        ['#334155', '#0F172A']
+      ];
+      const hairPalettesM = [
+        ['#334155', '#0F172A'],
+        ['#5D4037', '#271C19'],
+        ['#78350F', '#451A03']
+      ];
+      const hair = isFemale ? hairPalettesF[seed % hairPalettesF.length] : hairPalettesM[seed % hairPalettesM.length];
+
+      const backHair = isFemale
+        ? `<path d="M16 33 C12 56, 22 64, 26 64 L54 64 C58 64, 68 56, 64 33 Z" fill="${hair[1]}"/>`
+        : '';
+      const frontHair = isFemale
+        ? `<path d="M17 33 C19 12, 61 12, 63 33 C53 22, 40 26, 40 26 C40 26, 27 22, 17 33 Z" fill="url(#hair_${uid})"/>`
+        : `<path d="M18 32 C20 11, 60 11, 62 32 C52 21, 44 25, 40 19 C35 25, 26 21, 18 32 Z" fill="url(#hair_${uid})"/>`;
+
+      const accessory = isFemale && (seed % 2 === 0)
+        ? `<circle cx="57" cy="22" r="4.5" fill="#FF4D6D"/><circle cx="56" cy="21" r="1.5" fill="#FFF"/>`
+        : (!isFemale && seed % 3 === 0
+          ? `<rect x="25" y="33" width="11" height="7" rx="2.5" stroke="#1E293B" stroke-width="2" fill="rgba(255,255,255,0.25)"/><rect x="44" y="33" width="11" height="7" rx="2.5" stroke="#1E293B" stroke-width="2" fill="rgba(255,255,255,0.25)"/><line x1="36" y1="36" x2="44" y2="36" stroke="#1E293B" stroke-width="2"/>`
+          : '');
+
+      return `<svg width="${width}" height="${height}" viewBox="0 0 80 90">
+        ${defs}
+        <linearGradient id="hair_${uid}" x1="0%" y1="0%" x2="0%" y2="100%">
+          <stop offset="0%" stop-color="${hair[0]}"/>
+          <stop offset="100%" stop-color="${hair[1]}"/>
+        </linearGradient>
+        ${backHair}
+        ${legsGroup}
+        <path d="M20 76 C20 56, 60 56, 60 76 Z" fill="url(#body_${uid})"/>
+        <path d="M33 58 L40 65 L47 58 Z" fill="#FFFFFF" opacity="0.9"/>
+        <ellipse cx="22" cy="63" rx="5.5" ry="7" transform="rotate(22 22 63)" fill="url(#body_${uid})"/>
+        <circle cx="20" cy="67" r="4.5" fill="url(#skin_${uid})"/>
+
+        <g class="char-head-group">
+          <circle cx="19" cy="37" r="4.5" fill="url(#skin_${uid})"/>
+          <circle cx="61" cy="37" r="4.5" fill="url(#skin_${uid})"/>
+          <ellipse cx="40" cy="36" rx="21" ry="20" fill="url(#skin_${uid})"/>
+          ${frontHair}
+          <circle cx="31" cy="36" r="3.4" fill="url(#eye_${uid})"/>
+          <circle cx="49" cy="36" r="3.4" fill="url(#eye_${uid})"/>
+          <circle cx="30" cy="34.6" r="1.2" fill="#FFFFFF"/>
+          <circle cx="48" cy="34.6" r="1.2" fill="#FFFFFF"/>
+          <ellipse cx="25" cy="41" rx="3.8" ry="2.2" fill="#FCA5A5" opacity="0.75"/>
+          <ellipse cx="55" cy="41" rx="3.8" ry="2.2" fill="#FCA5A5" opacity="0.75"/>
+          <path d="M35 44 Q40 49 45 44" stroke="#991B1B" stroke-width="2.4" fill="none" stroke-linecap="round"/>
+          ${accessory}
+        </g>
+
+        ${chopsticksArm}
+      </svg>`;
+    }
+
+    // 繪製餐桌上的 Q 版立體美食 SVG
+    function generateQDishSvg(type, size = 32) {
+      const svgs = {
+        bento: `<svg width="${size}" height="${size}" viewBox="0 0 40 40">
+          <rect x="5" y="8" width="30" height="24" rx="5" fill="#78350F"/>
+          <rect x="7" y="10" width="26" height="20" rx="4" fill="#FEF3C7"/>
+          <circle cx="15" cy="20" r="6.5" fill="#FFF"/>
+          <circle cx="15" cy="20" r="1.8" fill="#EF4444"/>
+          <ellipse cx="27" cy="16" rx="5" ry="3.5" fill="#D97706"/>
+          <circle cx="26" cy="24" r="3.5" fill="#10B981"/>
+        </svg>`,
+        ramen: `<svg width="${size}" height="${size}" viewBox="0 0 40 40">
+          <path d="M6 18 C6 30, 34 30, 34 18 Z" fill="#DC2626"/>
+          <ellipse cx="20" cy="18" rx="14" ry="5" fill="#FDE68A"/>
+          <path d="M12 18 Q16 14 20 18 Q24 22 28 18" stroke="#F59E0B" stroke-width="2.2" fill="none"/>
+          <circle cx="24" cy="16" r="3" fill="#FFF"/><circle cx="24" cy="16" r="1.5" fill="#F59E0B"/>
+          <circle cx="15" cy="17" r="2.8" fill="#FCA5A5"/>
+        </svg>`,
+        toast: `<svg width="${size}" height="${size}" viewBox="0 0 40 40">
+          <ellipse cx="20" cy="26" rx="13" ry="5" fill="#D97706"/>
+          <rect x="8" y="20" width="24" height="4" rx="2" fill="#10B981"/>
+          <rect x="9" y="17" width="22" height="4" rx="2" fill="#78350F"/>
+          <path d="M7 17 C7 9, 33 9, 33 17 Z" fill="#F59E0B"/>
+          <circle cx="15" cy="13" r="1" fill="#FEF3C7"/><circle cx="22" cy="12" r="1" fill="#FEF3C7"/>
+        </svg>`,
+        boba: `<svg width="${size}" height="${size}" viewBox="0 0 40 40">
+          <polygon points="12,12 28,12 25,34 15,34" fill="#FDE68A"/>
+          <rect x="11" y="10" width="18" height="3" rx="1.5" fill="#FF7849"/>
+          <line x1="22" y1="4" x2="20" y2="28" stroke="#1F2937" stroke-width="2.5"/>
+          <circle cx="17" cy="30" r="1.8" fill="#3E2723"/><circle cx="21" cy="31" r="1.8" fill="#3E2723"/><circle cx="23" cy="28" r="1.8" fill="#3E2723"/>
+        </svg>`,
+        salad: `<svg width="${size}" height="${size}" viewBox="0 0 40 40">
+          <path d="M7 20 C7 31, 33 31, 33 20 Z" fill="#E5E7EB"/>
+          <circle cx="15" cy="18" r="5" fill="#34D399"/>
+          <circle cx="24" cy="18" r="5" fill="#10B981"/>
+          <circle cx="20" cy="15" r="4" fill="#6EE7B7"/>
+          <circle cx="17" cy="16" r="2.2" fill="#EF4444"/>
+          <circle cx="23" cy="17" r="2.2" fill="#FBBF24"/>
+        </svg>`,
+        hotpot: `<svg width="${size}" height="${size}" viewBox="0 0 40 40">
+          <rect x="7" y="16" width="26" height="14" rx="6" fill="#374151"/>
+          <ellipse cx="20" cy="16" rx="12" ry="4.5" fill="#EF4444"/>
+          <circle cx="16" cy="16" r="2.8" fill="#FDE68A"/>
+          <circle cx="23" cy="15" r="2.5" fill="#10B981"/>
+          <circle cx="20" cy="18" r="2.5" fill="#FCA5A5"/>
+        </svg>`
+      };
+      return svgs[type] || svgs.bento;
+    }
+
+    function renderAvatarPreview() {
+      document.getElementById('preview-avatar-svg').innerHTML = generate3DCharacterSvg(state.gender, state.avatarSeed, 70, 78);
+    }
+
+    // ==================== 進入與離開圓桌（穩定動畫渲染，絕不被輪詢打斷） ====================
+    function enterRoom() {
+      const pin = getPin();
+      if (pin.length !== 4) {
+        alert('⚠️ 請先輸入完整的 4 個數字包廂邀請碼！');
+        document.getElementById('pin-0').focus();
+        return;
+      }
+      const nameInput = document.getElementById('nickname-input').value.trim();
+      if (!nameInput) {
+        alert('⚠️ 請輸入您的 LINE 顯示名稱，讓大家知道是誰入桌！');
+        document.getElementById('nickname-input').focus();
+        return;
+      }
+
+      state.pin = pin;
+      state.nickname = nameInput;
+      state.leaving = false;
+      state.enteringUntil = Date.now() + 1600;
+      state.knownMemberIds = new Set([state.userId]);
+      saveDraftProfile();
+
+      document.getElementById('entry-screen').classList.add('hidden');
+      document.getElementById('room-screen').classList.remove('hidden');
+      document.getElementById('room-title-label').textContent = `包廂 #${pin}`;
+      document.getElementById('table-meal-label').textContent = state.meal;
+      document.getElementById('seats-layer').innerHTML = '';
+      document.getElementById('table-dishes-layer').innerHTML = '';
+
+      if (useCloud && db) {
+        roomRef = db.ref(`eat_rooms/room_${pin}`);
+        roomRef.on('value', (snapshot) => {
+          const val = snapshot.val();
+          if (val) {
+            const now = Date.now();
+            const activeMembers = {};
+            if (val.members) {
+              Object.values(val.members).forEach(m => {
+                if (!state.knownMemberIds.has(m.userId) && !m.leaving) {
+                  state.knownMemberIds.add(m.userId);
+                  m.localEnterUntil = now + 1600;
+                }
+                if (now - (m.lastSeen || 0) < 60000) {
+                  activeMembers[m.userId] = m;
+                }
+              });
+            }
+            state.members = activeMembers;
+            if (val.messages) {
+              state.messages = Object.values(val.messages).slice(-25);
+            }
+            if (val.latestGame && val.latestGame.id !== state.lastGameId) {
+              state.lastGameId = val.latestGame.id;
+              showSharedGameToast(val.latestGame);
+            }
+            renderRoom();
+          }
+        }, () => {
+          document.getElementById('cloud-dot').classList.add('offline');
+        });
+      }
+
+      syncMyState();
+      pushChatMessage({ system: true, text: `🚶‍♂️ ${state.nickname} 走進包廂坐上圓桌囉！`, time: Date.now() });
+
+      if (syncTimer) clearInterval(syncTimer);
+      syncTimer = setInterval(() => {
+        if (!state.leaving) {
+          syncMyState();
+          renderRoom();
+        }
+      }, 2200);
+
+      renderRoom();
+    }
+
+    function leaveRoom() {
+      if (state.leaving) return;
+      state.leaving = true;
+      state.bubbleText = '我吃飽先走囉，掰掰👋';
+      state.bubbleTime = Date.now();
+      syncMyState();
+      renderRoom(); // 立即啟動站起來走出畫面的動畫
+
+      pushChatMessage({ system: true, text: `👋 ${state.nickname} 站起來揮手道別，離開包廂了！`, time: Date.now() });
+
+      setTimeout(() => {
+        if (useCloud && roomRef) {
+          roomRef.child(`members/${state.userId}`).remove();
+          roomRef.off();
+        }
+        const key = `eat_room_${state.pin}`;
+        const localRoom = JSON.parse(localStorage.getItem(key) || '{"members":{},"messages":[]}');
+        delete localRoom.members[state.userId];
+        localStorage.setItem(key, JSON.stringify(localRoom));
+
+        if (syncTimer) clearInterval(syncTimer);
+        state.leaving = false;
+        document.getElementById('room-screen').classList.add('hidden');
+        document.getElementById('entry-screen').classList.remove('hidden');
+      }, 1500);
+    }
+
+    function syncMyState() {
+      const now = Date.now();
+      const myPayload = {
+        userId: state.userId,
+        nickname: state.nickname,
+        gender: state.gender,
+        avatarSeed: state.avatarSeed,
+        food: state.food || null,
+        bites: state.bites,
+        bubbleText: (now - state.bubbleTime < 7500) ? state.bubbleText : '',
+        taggedUntil: state.taggedUntil,
+        eatingUntil: state.eatingUntil,
+        enteringUntil: state.enteringUntil,
+        leaving: state.leaving,
+        lastSeen: now
+      };
+
+      state.members[state.userId] = myPayload;
+
+      if (useCloud && roomRef) {
+        roomRef.child(`members/${state.userId}`).set(myPayload).catch(() => {});
+      }
+
+      const key = `eat_room_${state.pin}`;
+      const localRoom = JSON.parse(localStorage.getItem(key) || '{"members":{},"messages":[]}');
+      localRoom.members[state.userId] = myPayload;
+      Object.keys(localRoom.members).forEach(id => {
+        if (now - localRoom.members[id].lastSeen > 60000) delete localRoom.members[id];
+      });
+      localStorage.setItem(key, JSON.stringify(localRoom));
+      if (!useCloud) {
+        state.members = localRoom.members;
+        state.messages = localRoom.messages || [];
+      }
+    }
+
+    function pushChatMessage(msgObj) {
+      state.messages.push(msgObj);
+      if (state.messages.length > 30) state.messages.shift();
+
+      if (useCloud && roomRef) {
+        roomRef.child('messages').push(msgObj).catch(() => {});
+      }
+      const key = `eat_room_${state.pin}`;
+      const localRoom = JSON.parse(localStorage.getItem(key) || '{"members":{},"messages":[]}');
+      localRoom.messages = state.messages;
+      localStorage.setItem(key, JSON.stringify(localRoom));
+    }
+
+    // ==================== 增量穩定渲染（保留進行中的 3D 動畫不被重置！） ====================
+    function renderRoom() {
+      const membersList = Object.values(state.members);
+      membersList.sort((a, b) => (a.userId === state.userId ? -1 : b.userId === state.userId ? 1 : a.userId.localeCompare(b.userId)));
+
+      document.getElementById('online-count-label').textContent = `(${membersList.length}人在桌)`;
+
+      const seatsLayer = document.getElementById('seats-layer');
+      const dishesLayer = document.getElementById('table-dishes-layer');
+      const tagPillsContainer = document.getElementById('tag-pills-container');
+      const now = Date.now();
+      const activeIds = new Set(membersList.map(m => m.userId));
+
+      // 清理已離開包廂的節點
+      Array.from(seatsLayer.children).forEach(el => {
+        if (!activeIds.has(el.dataset.uid)) el.remove();
+      });
+      Array.from(dishesLayer.children).forEach(el => {
+        if (!activeIds.has(el.dataset.uid)) el.remove();
+      });
+
+      let pillsHtml = '';
+
+      membersList.forEach((m, index) => {
+        const angleDeg = 90 + (index * (360 / Math.max(membersList.length, 1)));
+        const rad = (angleDeg * Math.PI) / 180;
+
+        // 1. 圓桌外圍 3D 立體人物座位座標（半徑 40%）
+        const sx = 50 + 40 * Math.cos(rad);
+        const sy = 50 + 40 * Math.sin(rad);
+
+        // 2. 圓桌桌面上的 Q 版美食盤座標（半徑 20.5%，正好落在圓桌木頭桌面上！）
+        const dx = 50 + 20.5 * Math.cos(rad);
+        const dy = 50 + 20.5 * Math.sin(rad);
+
+        const isMe = m.userId === state.userId;
+        const isEating = Boolean(m.eatingUntil && m.eatingUntil > now);
+        const isTagged = Boolean(m.taggedUntil && m.taggedUntil > now);
+        const isEntering = Boolean((m.enteringUntil && m.enteringUntil > now) || (m.localEnterUntil && m.localEnterUntil > now));
+        const isLeaving = Boolean(m.leaving);
+
+        // --- A. 增量更新 3D 立體人物節點 ---
+        let seatEl = seatsLayer.querySelector(`.seat-node[data-uid="${m.userId}"]`);
+        if (!seatEl) {
+          seatEl = document.createElement('div');
+          seatEl.className = 'seat-node';
+          seatEl.dataset.uid = m.userId;
+          seatEl.innerHTML = `
+            <div class="speech-slot"></div>
+            <div class="char-motion-box"></div>
+            <div class="food-slot"></div>
+            <div class="seat-name-tag"></div>
+          `;
+          seatsLayer.appendChild(seatEl);
+        }
+
+        seatEl.style.left = `${sx}%`;
+        seatEl.style.top = `${sy}%`;
+        seatEl.classList.toggle('is-me', isMe);
+        seatEl.classList.toggle('anim-eating', isEating);
+        seatEl.classList.toggle('tagged', isTagged);
+        seatEl.classList.toggle('anim-entering', isEntering);
+        seatEl.classList.toggle('anim-leaving', isLeaving);
+
+        // 只在角色外觀變更時重繪 SVG，避免中斷吃飯/走路 CSS 動畫
+        const charSig = `${m.gender}_${m.avatarSeed}`;
+        const motionBox = seatEl.querySelector('.char-motion-box');
+        if (motionBox.dataset.sig !== charSig) {
+          motionBox.dataset.sig = charSig;
+          motionBox.onclick = () => insertTag(m.nickname);
+          motionBox.innerHTML = generate3DCharacterSvg(m.gender, m.avatarSeed, 76, 84) + '<span class="float-emoji hidden">😋❤️</span>';
+        }
+        const floatEmoji = motionBox.querySelector('.float-emoji');
+        if (floatEmoji) floatEmoji.classList.toggle('hidden', !isEating);
+
+        const speechSlot = seatEl.querySelector('.speech-slot');
+        const newBubble = m.bubbleText ? `<div class="speech-bubble">${formatMessageWithTags(m.bubbleText)}</div>` : '';
+        if (speechSlot.innerHTML !== newBubble) speechSlot.innerHTML = newBubble;
+
+        const foodSlot = seatEl.querySelector('.food-slot');
+        const newFoodHtml = m.food
+          ? `<div class="food-badge" onclick="viewOriginalPhoto('${m.userId}')" title="點擊查看原始照片">${escapeHtml(m.food.name)} · ${m.food.cal}卡 🔍${m.bites > 0 ? `(吃${m.bites}口)` : ''}</div>`
+          : `<div class="food-badge" style="background:#F3F4F6; border-color:#D1D5DB; color:#6B7280;" onclick="${isMe ? 'openFoodModal()' : ''}">🍽️ ${isMe ? '點此上菜' : '還沒上菜'}</div>`;
+        if (foodSlot.innerHTML !== newFoodHtml) foodSlot.innerHTML = newFoodHtml;
+
+        const nameTag = seatEl.querySelector('.seat-name-tag');
+        nameTag.textContent = `${isMe ? '★ ' : ''}${m.nickname}`;
+
+        // --- B. 增量更新餐桌上的 Q 版美食盤 ---
+        let dishEl = dishesLayer.querySelector(`.table-dish-slot[data-uid="${m.userId}"]`);
+        if (m.food) {
+          if (!dishEl) {
+            dishEl = document.createElement('div');
+            dishEl.className = 'table-dish-slot';
+            dishEl.dataset.uid = m.userId;
+            dishesLayer.appendChild(dishEl);
+          }
+          dishEl.style.left = `${dx}%`;
+          dishEl.style.top = `${dy}%`;
+          dishEl.onclick = () => viewOriginalPhoto(m.userId);
+          dishEl.title = `點擊查看 ${m.nickname} 的原始照片`;
+
+          const dishSig = `${m.food.type}_${Boolean(m.food.imgUrl)}`;
+          if (dishEl.dataset.sig !== dishSig) {
+            dishEl.dataset.sig = dishSig;
+            dishEl.innerHTML = `
+              <div class="dish-plate">
+                <span class="dish-steam">♨️</span>
+                ${generateQDishSvg(m.food.type, 32)}
+                ${m.food.imgUrl ? '<span class="dish-photo-badge">原圖</span>' : ''}
+              </div>
+            `;
+          }
+        } else if (dishEl) {
+          dishEl.remove();
+        }
+
+        if (!isMe) {
+          pillsHtml += `<button type="button" class="action-pill pill-tag" onclick="insertTag('${escapeHtml(m.nickname)}')">@${escapeHtml(m.nickname)}</button>`;
+        }
+      });
+
+      tagPillsContainer.innerHTML = pillsHtml;
+
+      const chatLog = document.getElementById('chat-log');
+      const recent = state.messages.slice(-15);
+      const chatHtml = recent.map(msg => {
+        if (msg.system) {
+          return `<div class="chat-line" style="color:var(--muted); font-size:11px;">${escapeHtml(msg.text)}</div>`;
+        }
+        return `<div class="chat-line"><span class="chat-sender">${escapeHtml(msg.sender)}：</span>${formatMessageWithTags(msg.text)}</div>`;
+      }).join('');
+      if (chatLog.innerHTML !== chatHtml) {
+        chatLog.innerHTML = chatHtml;
+        chatLog.scrollTop = chatLog.scrollHeight;
+      }
+    }
+
+    // ==================== 拍照 / 相簿上菜（自動立即端上圓桌＋精準熱量微調） ====================
+    function openFoodModal() {
+      document.getElementById('food-modal').classList.remove('hidden');
+      if (state.food && state.food.imgUrl) {
+        document.getElementById('photo-confirm-box').classList.remove('hidden');
+        document.getElementById('draft-food-thumb').src = state.food.imgUrl;
+        document.getElementById('confirm-food-name').value = state.food.name;
+        document.getElementById('confirm-food-cal').value = state.food.cal;
+        document.getElementById('confirm-food-type').value = state.food.type;
+      } else {
+        document.getElementById('photo-confirm-box').classList.add('hidden');
+      }
+    }
+
+    function closeFoodModal() {
+      document.getElementById('food-modal').classList.add('hidden');
+    }
+
+    function handlePhotoSelected(input) {
+      if (!input.files || !input.files[0]) return;
+      const file = input.files[0];
+      const reader = new FileReader();
+
+      reader.onload = function(e) {
+        const img = new Image();
+        img.onload = function() {
+          const canvas = document.createElement('canvas');
+          const maxDim = 640;
+          let w = img.width, h = img.height;
+          if (w > maxDim || h > maxDim) {
+            if (w > h) { h = Math.round(h * maxDim / w); w = maxDim; }
+            else { w = Math.round(w * maxDim / h); h = maxDim; }
+          }
+          canvas.width = w;
+          canvas.height = h;
+          const ctx = canvas.getContext('2d');
+          ctx.drawImage(img, 0, 0, w, h);
+          const compressedDataUrl = canvas.toDataURL('image/jpeg', 0.78);
+
+          state.draftImgUrl = compressedDataUrl;
+          document.getElementById('draft-food-thumb').src = compressedDataUrl;
+          document.getElementById('photo-confirm-box').classList.remove('hidden');
+
+          const defaultName = '自拍美味餐點';
+          const defaultCal = 550;
+          const defaultType = 'bento';
+
+          document.getElementById('confirm-food-name').value = defaultName;
+          document.getElementById('confirm-food-cal').value = defaultCal;
+          document.getElementById('confirm-food-type').value = defaultType;
+
+          // 立即將 Q 版美食盤擺上圓桌並保存原始照片，同時讓使用者可直接在上方輸入框修正名稱與熱量！
+          setMyFood(defaultName, defaultCal, defaultType, compressedDataUrl, false);
+        };
+        img.src = e.target.result;
+        input.value = '';
+      };
+      reader.readAsDataURL(file);
+    }
+
+    function applyFoodPreset(name, cal, type) {
+      if (!document.getElementById('photo-confirm-box').classList.contains('hidden')) {
+        document.getElementById('confirm-food-name').value = name;
+        document.getElementById('confirm-food-cal').value = cal;
+        document.getElementById('confirm-food-type').value = type;
+        setMyFood(name, cal, type, state.draftImgUrl, false);
+        return;
+      }
+      setMyFood(name, cal, type, '', true);
+    }
+
+    function confirmAndServeFood() {
+      const name = document.getElementById('confirm-food-name').value.trim() || '美味自選餐點';
+      const cal = parseInt(document.getElementById('confirm-food-cal').value, 10) || 500;
+      const type = document.getElementById('confirm-food-type').value || 'bento';
+      setMyFood(name, cal, type, state.draftImgUrl || (state.food && state.food.imgUrl) || '', true);
+    }
+
+    function setMyFood(name, cal, type, imgUrl, shouldCloseModal = true) {
+      state.food = { name, cal, type, imgUrl };
+      state.bubbleText = `端上了【${name}】(${cal} kcal)！`;
+      state.bubbleTime = Date.now();
+      syncMyState();
+      pushChatMessage({ system: true, text: `🍱 ${state.nickname} 把「${name}」（${cal} kcal）擺上圓桌了！點桌上美食看原圖`, time: Date.now() });
+      if (shouldCloseModal) closeFoodModal();
+      renderRoom();
+    }
+
+    function viewOriginalPhoto(memberUserId) {
+      const member = state.members[memberUserId];
+      if (!member || !member.food) return;
+      if (!member.food.imgUrl) {
+        alert(`🍽️【${member.food.name}】(${member.food.cal} kcal)\n這道是快速套用的示範餐點，上傳真實照片後點擊即可檢視原檔照片！`);
+        return;
+      }
+      document.getElementById('viewer-img').src = member.food.imgUrl;
+      document.getElementById('viewer-title').textContent = `📸 ${member.nickname} 的原始餐點照片`;
+      document.getElementById('viewer-desc').textContent = `${member.food.name} · ${member.food.cal} kcal`;
+      document.getElementById('photo-viewer-modal').classList.remove('hidden');
+    }
+
+    function closePhotoViewer() {
+      document.getElementById('photo-viewer-modal').classList.add('hidden');
+    }
+
+    // ==================== 舉筷吃飯動畫與聊天 @tag ====================
+    function triggerEat() {
+      if (!state.food) {
+        openFoodModal();
+        return;
+      }
+      state.bites += 1;
+      state.eatingUntil = Date.now() + 2300;
+      state.bubbleText = `啊姆～夾一口吃！(第 ${state.bites} 口)`;
+      state.bubbleTime = Date.now();
+      syncMyState();
+      renderRoom();
+    }
+
+    function handleChatInput(el) {
+      const val = el.value;
+      const popup = document.getElementById('mention-popup');
+      if (val.endsWith('@')) {
+        const others = Object.values(state.members);
+        if (others.length > 0) {
+          popup.innerHTML = others.map(m =>
+            `<button type="button" class="mention-item" onclick="completeMention('${escapeHtml(m.nickname)}')">@${escapeHtml(m.nickname)}</button>`
+          ).join('');
+          popup.classList.remove('hidden');
+          return;
+        }
+      }
+      popup.classList.add('hidden');
+    }
+
+    function completeMention(name) {
+      const input = document.getElementById('chat-input');
+      input.value = input.value.replace(/@$/, `@${name} `);
+      document.getElementById('mention-popup').classList.add('hidden');
+      input.focus();
+    }
+
+    function insertTag(name) {
+      const input = document.getElementById('chat-input');
+      if (!input.value.includes(`@${name}`)) {
+        input.value = `${input.value}@${name} `;
+      }
+      input.focus();
+    }
+
+    function sendChat() {
+      const input = document.getElementById('chat-input');
+      const text = input.value.trim();
+      if (!text) return;
+
+      state.bubbleText = text;
+      state.bubbleTime = Date.now();
+
+      Object.values(state.members).forEach(m => {
+        if (text.includes(`@${m.nickname}`)) {
+          if (m.userId === state.userId) {
+            state.taggedUntil = Date.now() + 3500;
+          } else if (useCloud && roomRef) {
+            roomRef.child(`members/${m.userId}/taggedUntil`).set(Date.now() + 3500).catch(() => {});
+          }
+        }
+      });
+
+      pushChatMessage({ sender: state.nickname, text, time: Date.now() });
+      input.value = '';
+      document.getElementById('mention-popup').classList.add('hidden');
+      syncMyState();
+      renderRoom();
+    }
+
+    // ==================== 剪刀石頭布小遊戲 ====================
+    let rpsSelectedIds = new Set();
+
+    function openRpsModal() {
+      const members = Object.values(state.members);
+      rpsSelectedIds = new Set(members.map(m => m.userId));
+      renderRpsPlayerChips();
+      document.getElementById('rps-arena').classList.add('hidden');
+      document.getElementById('rps-modal').classList.remove('hidden');
+    }
+
+    function closeRpsModal() {
+      document.getElementById('rps-modal').classList.add('hidden');
+    }
+
+    function selectAllRpsPlayers(selectAll) {
+      const members = Object.values(state.members);
+      if (selectAll) {
+        rpsSelectedIds = new Set(members.map(m => m.userId));
+      } else {
+        rpsSelectedIds = new Set([state.userId]);
+      }
+      renderRpsPlayerChips();
+    }
+
+    function toggleRpsPlayer(uid) {
+      if (rpsSelectedIds.has(uid)) {
+        if (rpsSelectedIds.size > 1) rpsSelectedIds.delete(uid);
+      } else {
+        rpsSelectedIds.add(uid);
+      }
+      renderRpsPlayerChips();
+    }
+
+    function renderRpsPlayerChips() {
+      const members = Object.values(state.members);
+      const container = document.getElementById('rps-player-list');
+      container.innerHTML = members.map(m => {
+        const active = rpsSelectedIds.has(m.userId) ? 'selected' : '';
+        return `<button type="button" class="player-chip ${active}" onclick="toggleRpsPlayer('${m.userId}')">${active ? '✓ ' : ''}${escapeHtml(m.nickname)}</button>`;
+      }).join('');
+    }
+
+    function startRpsGame() {
+      const players = Object.values(state.members).filter(m => rpsSelectedIds.has(m.userId));
+      if (players.length < 2) {
+        alert('至少需要 2 位成員才能猜拳喔！');
+        return;
+      }
+
+      const arena = document.getElementById('rps-arena');
+      arena.classList.remove('hidden');
+      arena.innerHTML = `
+        <div class="shake-hand">✊</div>
+        <div style="font-size:14px; font-weight:800; margin-top:6px; color:var(--primary-dark);">剪刀、石頭、布... 出拳中！</div>
+      `;
+
+      setTimeout(() => {
+        const hands = [
+          { key: 'scissors', label: '✌️ 剪刀' },
+          { key: 'rock', label: '✊ 石頭' },
+          { key: 'paper', label: '🖐️ 布' }
+        ];
+
+        let results = [];
+        let losers = [];
+        for (let attempt = 0; attempt < 15; attempt++) {
+          results = players.map(p => {
+            const h = hands[Math.floor(Math.random() * 3)];
+            return { userId: p.userId, nickname: p.nickname, hand: h };
+          });
+          const distinct = new Set(results.map(r => r.hand.key));
+          if (distinct.size === 2) {
+            const arr = Array.from(distinct);
+            let losingKey = '';
+            if (arr.includes('rock') && arr.includes('scissors')) losingKey = 'scissors';
+            if (arr.includes('scissors') && arr.includes('paper')) losingKey = 'paper';
+            if (arr.includes('paper') && arr.includes('rock')) losingKey = 'rock';
+            losers = results.filter(r => r.hand.key === losingKey);
+            break;
+          }
+        }
+        if (losers.length === 0) {
+          losers = [results[Math.floor(Math.random() * results.length)]];
+        }
+
+        const loserNames = losers.map(l => l.nickname).join('、');
+        const loserIds = new Set(losers.map(l => l.userId));
+
+        arena.innerHTML = `
+          <div style="font-size:15px; font-weight:800; color:#DC2626; margin-bottom:10px;">
+            💥 猜拳結果出爐！輸家是：【 ${escapeHtml(loserNames)} 】
+          </div>
+          ${results.map(r => `
+            <div class="game-result-row ${loserIds.has(r.userId) ? 'loser' : ''}">
+              <span>${escapeHtml(r.nickname)} ${loserIds.has(r.userId) ? '😭 (輸了!)' : ''}</span>
+              <span style="font-size:16px;">${r.hand.label}</span>
+            </div>
+          `).join('')}
+        `;
+
+        const summaryMsg = `✌️【剪刀石頭布結果】參與：${players.map(p=>p.nickname).join('、')} ➔ 😭 輸家是【${loserNames}】！`;
+        pushChatMessage({ system: true, text: summaryMsg, time: Date.now() });
+        broadcastGameEvent(summaryMsg);
+      }, 1300);
+    }
+
+    // ==================== 全桌數支小遊戲 ====================
+    function openCountModal() {
+      document.getElementById('count-arena').classList.add('hidden');
+      document.getElementById('count-modal').classList.remove('hidden');
+    }
+
+    function closeCountModal() {
+      document.getElementById('count-modal').classList.add('hidden');
+    }
+
+    function startCountGame() {
+      const players = Object.values(state.members);
+      if (players.length < 1) return;
+
+      const arena = document.getElementById('count-arena');
+      arena.classList.remove('hidden');
+
+      const fingerIcons = ['✊ (0支)', '☝️ (1支)', '✌️ (2支)', '🤟 (3支)', '🖖 (4支)', '🖐️ (5支)'];
+      const throws = players.map(p => {
+        const count = Math.floor(Math.random() * 6);
+        return { userId: p.userId, nickname: p.nickname, count, icon: fingerIcons[count] };
+      });
+
+      const totalSticks = throws.reduce((sum, t) => sum + t.count, 0) || 1;
+      const targetIndex = (totalSticks - 1) % players.length;
+      const chosenPlayer = players[targetIndex];
+
+      let step = 0;
+      const totalSteps = Math.min(totalSticks, 12);
+      const startOffset = (targetIndex - (totalSteps - 1) + players.length * 10) % players.length;
+
+      const animTimer = setInterval(() => {
+        const currentHighlightIdx = (startOffset + step) % players.length;
+        const isFinal = step >= totalSteps - 1;
+
+        arena.innerHTML = `
+          <div style="font-size:13px; font-weight:800; color:var(--primary-dark); margin-bottom:8px;">
+            ${isFinal ? `🎯 總共 ${totalSticks} 支！最後數到：【 ${escapeHtml(chosenPlayer.nickname)} 】` : `☝️ 全桌亮手指總共 ${totalSticks} 支，正在數支中...`}
+          </div>
+          ${throws.map((t, idx) => {
+            const isActive = idx === currentHighlightIdx;
+            return `
+              <div class="game-result-row ${isActive ? 'picked' : ''}">
+                <span>${isActive ? '👉 ' : ''}${escapeHtml(t.nickname)}</span>
+                <span>${t.icon}</span>
+              </div>
+            `;
+          }).join('')}
+        `;
+
+        step++;
+        if (step >= totalSteps) {
+          clearInterval(animTimer);
+          const summaryMsg = `☝️【全桌數支結果】全桌共 ${totalSticks} 支，最後數到【${chosenPlayer.nickname}】！`;
+          pushChatMessage({ system: true, text: summaryMsg, time: Date.now() });
+          broadcastGameEvent(summaryMsg);
+        }
+      }, 220);
+    }
+
+    function broadcastGameEvent(text) {
+      const gameObj = { id: 'g_' + Date.now(), text };
+      state.lastGameId = gameObj.id;
+      if (useCloud && roomRef) {
+        roomRef.child('latestGame').set(gameObj).catch(() => {});
+      }
+    }
+
+    function showSharedGameToast(gameObj) {
+      state.bubbleText = gameObj.text;
+      state.bubbleTime = Date.now();
+      renderRoom();
+    }
+
+    function escapeHtml(str) {
+      return String(str || '').replace(/[&<>"']/g, s => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+      }[s]));
+    }
+
+    function formatMessageWithTags(text) {
+      const safe = escapeHtml(text);
+      return safe.replace(/(@[^\s@]+)/g, '<span class="tag-highlight">$1</span>');
+    }
+  </script>
+</body>
+</html>
