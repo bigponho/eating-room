@@ -4,6 +4,9 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
   <title>一起吃三餐・雲端圓桌包廂</title>
+  <!-- 引入 Firebase Realtime Database SDK 實現跨手機真實即時連線 -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
   <style>
     :root {
       --bg: #FFF9F2;
@@ -21,19 +24,17 @@
     * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
     html, body {
       margin: 0; padding: 0;
-      width: 100%; height: 100dvh;
+      width: 100%; min-height: 100%;
       font-family: -apple-system, BlinkMacSystemFont, "PingFang TC", "Microsoft JhengHei", sans-serif;
       background: var(--bg);
       color: var(--text);
-      overflow: hidden;
     }
 
-    /* 通用工具 */
     .hidden { display: none !important; }
     .btn {
       border: none; border-radius: 14px; font-weight: 700; cursor: pointer;
       display: inline-flex; align-items: center; justify-content: center; gap: 6px;
-      transition: transform 0.1s, opacity 0.15s; font-size: 15px;
+      transition: transform 0.1s, opacity 0.15s; font-size: 14px;
     }
     .btn:active { transform: scale(0.97); }
     .btn-primary {
@@ -48,38 +49,41 @@
       background: #fff; color: var(--text); border: 1.5px solid var(--border);
     }
 
-    /* 入口頁面 (完美適配手機直屏與 LINE WebView) */
+    /* ================= 1. 入口大廳（修復手機上下捲動被截斷問題） ================= */
     #entry-screen {
-      width: 100%; height: 100dvh;
+      width: 100%;
+      min-height: 100dvh;
       overflow-y: auto;
-      padding: calc(12px + var(--safe-top)) 16px calc(24px + var(--safe-bottom));
+      -webkit-overflow-scrolling: touch;
+      padding: calc(12px + var(--safe-top)) 14px calc(80px + var(--safe-bottom));
       display: flex; flex-direction: column; align-items: center;
     }
     .entry-card {
       width: 100%; max-width: 440px;
       background: var(--card); border-radius: 24px;
       box-shadow: 0 10px 30px rgba(62, 39, 35, 0.08);
-      overflow: hidden; border: 1px solid var(--border);
+      border: 1px solid var(--border);
+      overflow: visible;
     }
     .hero-banner {
       background: linear-gradient(135deg, #FF8A5B 0%, #FF6B35 100%);
-      color: #fff; padding: 20px 16px; text-align: center;
+      color: #fff; padding: 18px 14px; text-align: center;
+      border-radius: 23px 23px 0 0;
     }
-    .hero-emojis { font-size: 28px; margin-bottom: 4px; letter-spacing: 4px; }
-    .hero-title { font-size: 22px; font-weight: 800; margin: 0; letter-spacing: 1px; }
-    .hero-sub { font-size: 12px; opacity: 0.92; margin-top: 4px; }
+    .hero-emojis { font-size: 26px; margin-bottom: 2px; letter-spacing: 4px; }
+    .hero-title { font-size: 21px; font-weight: 800; margin: 0; }
+    .hero-sub { font-size: 11.5px; opacity: 0.94; margin-top: 4px; }
 
-    .entry-body { padding: 16px; }
+    .entry-body { padding: 14px; }
 
-    /* 分頁切換 */
     .tabs {
       display: grid; grid-template-columns: 1fr 1fr;
-      background: #F8EFE6; padding: 4px; border-radius: 14px; margin-bottom: 16px;
+      background: #F8EFE6; padding: 4px; border-radius: 14px; margin-bottom: 14px;
     }
     .tab-btn {
-      padding: 10px 6px; border: none; border-radius: 11px;
+      padding: 9px 6px; border: none; border-radius: 11px;
       font-size: 13px; font-weight: 700; color: var(--muted);
-      background: transparent; cursor: pointer; transition: all 0.2s;
+      background: transparent; cursor: pointer;
     }
     .tab-btn.active {
       background: #fff; color: var(--primary-dark);
@@ -88,63 +92,66 @@
 
     .section-header {
       display: flex; justify-content: space-between; align-items: center;
-      font-size: 13px; font-weight: 700; margin-bottom: 8px;
+      font-size: 13px; font-weight: 700; margin-bottom: 8px; gap: 6px;
     }
     .section-hint { font-size: 11px; color: var(--muted); font-weight: 400; }
 
-    /* 4位數密碼框 */
     .pin-box-wrap {
-      display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px;
-      margin-bottom: 16px;
+      display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px;
+      margin-bottom: 14px;
     }
     .pin-input {
-      width: 100%; height: 52px; text-align: center; font-size: 24px; font-weight: 800;
+      width: 100%; height: 48px; text-align: center; font-size: 22px; font-weight: 800;
       border: 2px solid var(--border); border-radius: 14px; background: #FFFDFB;
-      color: var(--text); outline: none; transition: border-color 0.2s;
+      color: var(--text); outline: none;
     }
     .pin-input:focus { border-color: var(--primary); background: #fff; }
 
-    /* 餐別選擇 */
     .meal-grid {
-      display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin-bottom: 14px;
+      display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin-bottom: 12px;
     }
     .meal-btn {
-      padding: 8px 4px; border-radius: 12px; border: 1.5px solid var(--border);
+      padding: 7px 4px; border-radius: 11px; border: 1.5px solid var(--border);
       background: #fff; font-size: 12px; font-weight: 700; color: var(--text); cursor: pointer;
     }
     .meal-btn.active {
       border-color: var(--primary); background: var(--secondary); color: var(--primary-dark);
     }
 
-    /* 個人資料卡片 */
+    .invite-box {
+      background: #F9F5F0; border: 1px dashed #D7CCC8; border-radius: 12px;
+      padding: 9px; font-size: 11.5px; color: var(--text); white-space: pre-wrap;
+      word-break: break-all; margin-bottom: 10px; line-height: 1.4;
+    }
+
     .profile-card {
       background: #FFFBF7; border: 1.5px solid var(--border);
-      border-radius: 16px; padding: 12px; margin-bottom: 16px;
-      display: flex; gap: 12px; align-items: center;
+      border-radius: 16px; padding: 11px; margin-bottom: 14px;
+      display: flex; gap: 10px; align-items: center;
     }
     .avatar-preview-wrap {
-      position: relative; width: 74px; height: 74px; flex-shrink: 0;
-      background: #fff; border-radius: 18px; border: 2px solid var(--border);
+      position: relative; width: 68px; height: 68px; flex-shrink: 0;
+      background: #fff; border-radius: 16px; border: 2px solid var(--border);
       display: flex; align-items: center; justify-content: center;
     }
     .dice-btn {
-      position: absolute; bottom: -6px; right: -6px;
-      width: 28px; height: 28px; border-radius: 50%;
+      position: absolute; bottom: -5px; right: -5px;
+      width: 26px; height: 26px; border-radius: 50%;
       background: #fff; border: 1.5px solid var(--border);
       box-shadow: 0 2px 6px rgba(0,0,0,0.12);
-      font-size: 14px; cursor: pointer; display: flex; align-items: center; justify-content: center;
+      font-size: 13px; cursor: pointer; display: flex; align-items: center; justify-content: center;
     }
     .profile-fields { flex: 1; min-width: 0; }
     .text-input {
-      width: 100%; padding: 9px 12px; border-radius: 10px;
+      width: 100%; padding: 8px 10px; border-radius: 10px;
       border: 1.5px solid var(--border); font-size: 14px; font-weight: 600;
-      outline: none; margin-bottom: 8px; background: #fff;
+      outline: none; margin-bottom: 7px; background: #fff;
     }
     .text-input:focus { border-color: var(--primary); }
 
-    .gender-group { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+    .gender-group { display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px; }
     .gender-btn {
-      padding: 6px 2px; border-radius: 10px; border: 1.5px solid var(--border);
+      padding: 6px 2px; border-radius: 9px; border: 1.5px solid var(--border);
       background: #fff; font-size: 12px; font-weight: 700; cursor: pointer; color: var(--muted);
     }
     .gender-btn.active {
@@ -153,42 +160,38 @@
 
     .line-autofill-btn {
       background: #E8F8EE; color: #059640; border: 1px solid #B7EBC9;
-      border-radius: 20px; padding: 4px 10px; font-size: 11px; font-weight: 700;
-      cursor: pointer; display: inline-flex; align-items: center; gap: 4px;
+      border-radius: 20px; padding: 4px 9px; font-size: 11px; font-weight: 700;
+      cursor: pointer; white-space: nowrap; flex-shrink: 0;
     }
 
-    .invite-box {
-      background: #F9F5F0; border: 1px dashed #D7CCC8; border-radius: 12px;
-      padding: 10px; font-size: 12px; color: var(--text); white-space: pre-wrap;
-      margin-bottom: 10px; line-height: 1.45;
-    }
-
-    /* ================= 圓桌包廂主畫面 ================= */
+    /* ================= 2. 圓桌包廂主畫面 ================= */
     #room-screen {
+      position: fixed; inset: 0;
       width: 100%; height: 100dvh;
       display: flex; flex-direction: column;
       padding-top: var(--safe-top);
       padding-bottom: var(--safe-bottom);
       background: radial-gradient(circle at 50% 42%, #FFFDF9 0%, #F7EBDD 100%);
+      overflow: hidden;
     }
 
-    /* 頂部資訊列 */
     .room-topbar {
-      height: 52px; padding: 0 12px;
+      height: 48px; padding: 0 10px;
       display: flex; align-items: center; justify-content: space-between;
-      background: rgba(255,255,255,0.9); backdrop-filter: blur(8px);
+      background: rgba(255,255,255,0.92); backdrop-filter: blur(8px);
       border-bottom: 1px solid var(--border); flex-shrink: 0; z-index: 20;
     }
     .room-badge {
-      display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 700;
+      display: flex; align-items: center; gap: 5px; font-size: 12px; font-weight: 700;
     }
     .status-dot {
       width: 8px; height: 8px; border-radius: 50%; background: #10B981;
       box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.2);
     }
-    .top-actions { display: flex; gap: 6px; }
+    .status-dot.offline { background: #F59E0B; }
+    .top-actions { display: flex; gap: 5px; }
     .mini-btn {
-      padding: 6px 10px; border-radius: 10px; font-size: 12px; font-weight: 700;
+      padding: 5px 9px; border-radius: 9px; font-size: 11.5px; font-weight: 700;
       border: 1px solid var(--border); background: #fff; color: var(--text); cursor: pointer;
     }
     .mini-btn.leave { background: #FEE2E2; color: #DC2626; border-color: #FECACA; }
@@ -200,7 +203,7 @@
       overflow: hidden; min-height: 0;
     }
     .wooden-table {
-      width: min(64vw, 250px); height: min(64vw, 250px);
+      width: min(60vw, 235px); height: min(60vw, 235px);
       border-radius: 50%;
       background: radial-gradient(circle at 35% 35%, #E6A15C, #C67D3B 75%, #A66024 100%);
       box-shadow: 0 14px 30px rgba(139, 69, 19, 0.25), inset 0 3px 10px rgba(255,255,255,0.4);
@@ -208,9 +211,9 @@
       position: relative; display: flex; align-items: center; justify-content: center;
     }
     .turntable {
-      width: 46%; height: 46%; border-radius: 50%;
+      width: 48%; height: 48%; border-radius: 50%;
       background: rgba(255, 255, 255, 0.25);
-      border: 2px dashed rgba(255,255,255,0.55);
+      border: 2px dashed rgba(255,255,255,0.6);
       display: flex; flex-direction: column; align-items: center; justify-content: center;
       text-align: center; color: #fff; font-size: 11px; font-weight: 700;
       text-shadow: 0 1px 3px rgba(0,0,0,0.3); padding: 4px;
@@ -218,13 +221,13 @@
 
     /* 座位節點 */
     .seat-node {
-      position: absolute; width: 92px;
+      position: absolute; width: 96px;
       display: flex; flex-direction: column; align-items: center;
       transform: translate(-50%, -50%);
-      transition: all 0.3s ease; z-index: 10;
+      transition: all 0.35s ease; z-index: 10;
     }
     .seat-avatar-box {
-      position: relative; width: 58px; height: 58px;
+      position: relative; width: 54px; height: 54px;
       background: #fff; border-radius: 50%;
       border: 3px solid #fff;
       box-shadow: 0 4px 12px rgba(0,0,0,0.14);
@@ -242,11 +245,11 @@
 
     /* 角色旁漫畫對話框 */
     .speech-bubble {
-      position: absolute; bottom: 105%; left: 50%; transform: translateX(-50%);
+      position: absolute; bottom: 104%; left: 50%; transform: translateX(-50%);
       background: #fff; color: var(--text);
-      padding: 6px 10px; border-radius: 12px;
-      font-size: 12px; font-weight: 700; line-height: 1.3;
-      max-width: 150px; width: max-content; word-break: break-word;
+      padding: 5px 9px; border-radius: 12px;
+      font-size: 11.5px; font-weight: 700; line-height: 1.3;
+      max-width: 148px; width: max-content; word-break: break-word;
       box-shadow: 0 4px 14px rgba(0,0,0,0.15);
       border: 1.5px solid var(--primary);
       z-index: 30; animation: popIn 0.2s ease-out;
@@ -260,94 +263,136 @@
 
     /* 餐點與卡路里牌 */
     .food-badge {
-      margin-top: -8px; z-index: 12;
+      margin-top: -7px; z-index: 12;
       background: #FFFBEB; border: 1.5px solid #F59E0B;
-      border-radius: 12px; padding: 2px 7px;
-      display: flex; align-items: center; gap: 4px;
+      border-radius: 11px; padding: 2px 6px;
+      display: flex; align-items: center; gap: 3px;
       box-shadow: 0 2px 6px rgba(0,0,0,0.1);
       font-size: 10px; font-weight: 800; color: #B45309;
       white-space: nowrap;
     }
     .seat-name-tag {
-      margin-top: 2px; background: rgba(62, 39, 35, 0.78); color: #fff;
-      padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 700;
+      margin-top: 2px; background: rgba(62, 39, 35, 0.8); color: #fff;
+      padding: 2px 7px; border-radius: 9px; font-size: 10.5px; font-weight: 700;
       max-width: 88px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
     }
 
-    /* 飄浮愛心/食物特效 */
     .float-emoji {
-      position: absolute; top: -10px; font-size: 20px; pointer-events: none;
+      position: absolute; top: -12px; font-size: 18px; pointer-events: none;
       animation: floatUp 1.1s ease-out forwards; z-index: 40;
     }
 
     /* 底部操作與聊天區 */
     .bottom-dock {
       background: #fff; border-top: 1px solid var(--border);
-      padding: 8px 10px 10px; flex-shrink: 0; z-index: 25;
+      padding: 7px 10px 8px; flex-shrink: 0; z-index: 25;
     }
     .action-strip {
-      display: flex; gap: 6px; margin-bottom: 8px; overflow-x: auto;
-      padding-bottom: 2px;
+      display: flex; gap: 6px; margin-bottom: 6px; overflow-x: auto;
+      padding-bottom: 2px; -webkit-overflow-scrolling: touch;
     }
+    .action-strip::-webkit-scrollbar { display: none; }
     .action-pill {
-      padding: 7px 12px; border-radius: 20px; font-size: 12px; font-weight: 700;
+      padding: 6px 11px; border-radius: 18px; font-size: 11.5px; font-weight: 700;
       border: none; cursor: pointer; white-space: nowrap;
-      display: inline-flex; align-items: center; gap: 4px;
+      display: inline-flex; align-items: center; gap: 4px; flex-shrink: 0;
     }
     .pill-photo { background: #FFF0E5; color: #E85A2A; border: 1px solid #FFCCB3; }
     .pill-eat { background: #ECFDF5; color: #059669; border: 1px solid #A7F3D0; }
+    .pill-game-rps { background: #EEF2FF; color: #4F46E5; border: 1px solid #C7D2FE; }
+    .pill-game-num { background: #FEF3C7; color: #B45309; border: 1px solid #FDE68A; }
     .pill-tag { background: #F3F4F6; color: #374151; }
 
-    /* 迷你聊天紀錄條 */
     .mini-chat-log {
-      max-height: 64px; overflow-y: auto; font-size: 12px;
+      max-height: 58px; overflow-y: auto; font-size: 11.5px;
       background: #FAF6F2; border-radius: 10px; padding: 5px 8px;
-      margin-bottom: 8px; line-height: 1.4;
+      margin-bottom: 6px; line-height: 1.4;
     }
     .chat-line { margin-bottom: 2px; }
     .chat-sender { font-weight: 700; color: var(--primary-dark); }
 
     .chat-input-row { display: flex; gap: 6px; position: relative; }
     .chat-input {
-      flex: 1; padding: 9px 12px; border-radius: 20px;
+      flex: 1; padding: 8px 12px; border-radius: 20px;
       border: 1.5px solid var(--border); font-size: 14px; outline: none;
     }
     .chat-input:focus { border-color: var(--primary); }
     .send-btn {
-      padding: 0 16px; border-radius: 20px; background: var(--primary);
-      color: #fff; border: none; font-weight: 700; font-size: 14px; cursor: pointer;
+      padding: 0 14px; border-radius: 20px; background: var(--primary);
+      color: #fff; border: none; font-weight: 700; font-size: 13.5px; cursor: pointer;
     }
 
-    /* @tag 彈出選單 */
     .mention-popup {
       position: absolute; bottom: 105%; left: 0; right: 0;
       background: #fff; border: 1.5px solid var(--border);
       border-radius: 12px; box-shadow: 0 -4px 16px rgba(0,0,0,0.1);
-      padding: 4px; display: flex; gap: 6px; flex-wrap: wrap; z-index: 50;
+      padding: 5px; display: flex; gap: 6px; flex-wrap: wrap; z-index: 50;
     }
     .mention-item {
       padding: 5px 10px; background: var(--secondary); color: var(--primary-dark);
       border-radius: 8px; font-size: 12px; font-weight: 700; border: none; cursor: pointer;
     }
 
-    /* 拍餐點彈窗 */
+    /* ================= 3. 通用彈窗（拍餐點 / 剪刀石頭布 / 全桌數支） ================= */
     .modal-backdrop {
-      position: fixed; inset: 0; background: rgba(0,0,0,0.55);
+      position: fixed; inset: 0; background: rgba(0,0,0,0.58);
       display: flex; align-items: center; justify-content: center;
       padding: 16px; z-index: 100;
     }
     .modal-card {
-      width: 100%; max-width: 380px; background: #fff;
-      border-radius: 22px; padding: 18px; box-shadow: 0 12px 32px rgba(0,0,0,0.2);
+      width: 100%; max-width: 390px; max-height: 88dvh; overflow-y: auto;
+      background: #fff; border-radius: 22px; padding: 18px;
+      box-shadow: 0 12px 32px rgba(0,0,0,0.25);
     }
     .preset-foods {
-      display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 12px 0;
+      display: grid; grid-template-columns: repeat(3, 1fr); gap: 7px; margin: 10px 0;
     }
     .preset-food-btn {
-      padding: 8px 4px; border-radius: 12px; border: 1.5px solid var(--border);
-      background: #FFFDFB; text-align: center; cursor: pointer; font-size: 12px; font-weight: 700;
+      padding: 7px 4px; border-radius: 11px; border: 1.5px solid var(--border);
+      background: #FFFDFB; text-align: center; cursor: pointer; font-size: 11.5px; font-weight: 700;
     }
 
+    /* 遊戲動畫區 */
+    .game-arena {
+      background: #FFF8F1; border: 2px solid #FDE68A; border-radius: 16px;
+      padding: 14px; margin: 10px 0; text-align: center;
+    }
+    .shake-hand {
+      display: inline-block; font-size: 46px;
+      animation: handShake 0.45s ease-in-out infinite;
+    }
+    .player-chip-grid {
+      display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0 12px;
+    }
+    .player-chip {
+      padding: 6px 11px; border-radius: 20px; font-size: 12px; font-weight: 700;
+      border: 1.5px solid var(--border); background: #fff; cursor: pointer;
+    }
+    .player-chip.selected {
+      background: #EEF2FF; border-color: #6366F1; color: #4338CA;
+    }
+    .game-result-row {
+      display: flex; justify-content: space-between; align-items: center;
+      padding: 8px 10px; border-radius: 10px; background: #fff;
+      margin-bottom: 6px; border: 1px solid var(--border); font-size: 13px; font-weight: 700;
+    }
+    .game-result-row.loser {
+      background: #FEE2E2; border-color: #F87171; color: #B91C1C;
+      animation: pulseAlert 0.6s ease 3;
+    }
+    .game-result-row.picked {
+      background: #FEF3C7; border-color: #F59E0B; color: #B45309;
+      transform: scale(1.03);
+    }
+
+    @keyframes handShake {
+      0%, 100% { transform: rotate(-15deg) translateY(0); }
+      50% { transform: rotate(20deg) translateY(-10px); }
+    }
+    @keyframes pulseAlert {
+      0%, 100% { transform: scale(1); }
+      50% { transform: scale(1.04); }
+    }
     @keyframes chew {
       0%, 100% { transform: scale(1) rotate(0deg); }
       25% { transform: scale(1.12, 0.92) rotate(-4deg); }
@@ -375,7 +420,7 @@
       <div class="hero-banner">
         <div class="hero-emojis">🍱 🍜 🧋</div>
         <h1 class="hero-title">一起吃三餐</h1>
-        <p class="hero-sub">LINE 好友雲端圓桌包廂・拍餐點變Q版美食・即時聊天開動</p>
+        <p class="hero-sub">LINE 好友雲端圓桌包廂・拍餐點變Q版美食・聚餐小遊戲</p>
       </div>
 
       <div class="entry-body">
@@ -405,14 +450,14 @@
             <button type="button" class="line-autofill-btn" onclick="randomPin()">🎲 隨機 4 碼</button>
           </div>
           <div class="meal-grid">
-            <button type="button" class="meal-btn active" onclick="selectMeal(this, '元氣早餐 🥪')">🥪 早餐</button>
-            <button type="button" class="meal-btn" onclick="selectMeal(this, '美味午餐 🍱')">🍱 午餐</button>
+            <button type="button" class="meal-btn" onclick="selectMeal(this, '元氣早餐 🥪')">🥪 早餐</button>
+            <button type="button" class="meal-btn active" onclick="selectMeal(this, '美味午餐 🍱')">🍱 午餐</button>
             <button type="button" class="meal-btn" onclick="selectMeal(this, '豐盛晚餐 🍲')">🍲 晚餐</button>
             <button type="button" class="meal-btn" onclick="selectMeal(this, '罪惡宵夜 🍢')">🍢 宵夜</button>
           </div>
 
           <div class="invite-box" id="invite-preview"></div>
-          <div style="display:grid; grid-template-columns: 1fr 1.3fr; gap:8px; margin-bottom:16px;">
+          <div style="display:grid; grid-template-columns: 1fr 1.3fr; gap:8px; margin-bottom:14px;">
             <button type="button" class="btn btn-outline" style="padding:10px;" onclick="copyInvite()">📋 複製邀請函</button>
             <button type="button" class="btn btn-line" style="padding:10px;" onclick="shareToLine()">💬 傳送 LINE 邀請</button>
           </div>
@@ -451,7 +496,7 @@
   <div id="room-screen" class="hidden">
     <div class="room-topbar">
       <div class="room-badge">
-        <span class="status-dot"></span>
+        <span class="status-dot" id="cloud-dot"></span>
         <span id="room-title-label">包廂 #0000</span>
         <span style="color:var(--muted); font-weight:500;" id="online-count-label">(1人在桌)</span>
       </div>
@@ -466,18 +511,19 @@
       <div class="wooden-table">
         <div class="turntable">
           <div id="table-meal-label" style="font-size:13px;">🍱 美味午餐</div>
-          <div style="font-size:10px; opacity:0.85; margin-top:2px;">點擊頭像可 @tag</div>
+          <div style="font-size:10px; opacity:0.88; margin-top:2px;">點擊頭像可 @tag</div>
         </div>
       </div>
-      <!-- 動態生成的座位會插入這裡 -->
       <div id="seats-layer"></div>
     </div>
 
     <!-- 底部操作與聊天區 -->
     <div class="bottom-dock">
       <div class="action-strip" id="quick-action-bar">
-        <button type="button" class="action-pill pill-photo" onclick="openFoodModal()">📸 拍餐點變Q版</button>
+        <button type="button" class="action-pill pill-photo" onclick="openFoodModal()">📸 拍照/相簿餐點</button>
         <button type="button" class="action-pill pill-eat" onclick="triggerEat()">😋 開動吃一口！</button>
+        <button type="button" class="action-pill pill-game-rps" onclick="openRpsModal()">✌️ 剪刀石頭布</button>
+        <button type="button" class="action-pill pill-game-num" onclick="openCountModal()">☝️ 全桌數支</button>
         <div id="tag-pills-container" style="display:flex; gap:6px;"></div>
       </div>
 
@@ -491,25 +537,35 @@
     </div>
   </div>
 
-  <!-- ==================== 3. 拍餐點辨識與 Q 版生成彈窗 ==================== -->
+  <!-- ==================== 3. 拍餐點 / 相簿讀取變 Q 版彈窗 ==================== -->
   <div id="food-modal" class="modal-backdrop hidden">
     <div class="modal-card">
-      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
-        <h3 style="margin:0; font-size:17px;">📸 拍下你的餐點變 Q 版美食</h3>
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+        <h3 style="margin:0; font-size:16px;">🍽️ 拍照或從相簿讀取餐點變 Q 版</h3>
         <button type="button" onclick="closeFoodModal()" style="border:none; background:none; font-size:20px; cursor:pointer;">✕</button>
       </div>
-      <p style="font-size:12px; color:var(--muted); margin:0 0 12px;">拍攝或上傳手邊食物照片，系統將自動辨識食物、換算卡路里並生成專屬 Q 版插畫端上圓桌！</p>
+      <p style="font-size:12px; color:var(--muted); margin:0 0 12px;">可用手機相機直接拍攝，或從相簿挑選美食照片，系統將辨識熱量並生成 Q 版美食端上桌！</p>
 
-      <label class="btn btn-primary" style="width:100%; padding:12px; margin-bottom:10px; cursor:pointer;">
-        📷 開啟相機拍照 / 選擇食物照片
-        <input type="file" accept="image/*" capture="environment" style="display:none;" onchange="handlePhotoUpload(this)" />
-      </label>
-
-      <div id="photo-analyzing" class="hidden" style="text-align:center; padding:12px; background:#FFF8F1; border-radius:12px; margin-bottom:10px; font-size:13px; font-weight:700; color:var(--primary-dark);">
-        ✨ AI 正在分析餐點熱量並繪製 Q 版插畫中...
+      <div style="display:grid; grid-template-columns: 1fr 1fr; gap:8px; margin-bottom:10px;">
+        <!-- 直接開啟相機 -->
+        <label class="btn btn-primary" style="padding:11px 6px; cursor:pointer; font-size:13px;">
+          📷 相機現場拍照
+          <input type="file" accept="image/*" capture="environment" style="display:none;" onchange="handlePhotoUpload(this)" />
+        </label>
+        <!-- 從相簿選擇照片（不加 capture 屬性，讓 iOS/Android 打開相簿選單） -->
+        <label class="btn btn-outline" style="padding:11px 6px; cursor:pointer; font-size:13px; border-color:var(--primary); color:var(--primary-dark);">
+          🖼️ 從相簿選照片
+          <input type="file" accept="image/*" style="display:none;" onchange="handlePhotoUpload(this)" />
+        </label>
       </div>
 
-      <div style="font-size:12px; font-weight:700; color:var(--muted); margin-top:8px;">或直接點選常見餐點測試：</div>
+      <!-- 照片預覽與分析動畫 -->
+      <div id="photo-analyzing" class="hidden" style="text-align:center; padding:12px; background:#FFF8F1; border-radius:12px; margin-bottom:10px; border:1px solid #FDE68A;">
+        <img id="uploaded-thumb" src="" alt="餐點預覽" style="width:84px; height:84px; object-fit:cover; border-radius:12px; margin-bottom:6px; border:2px solid #fff; box-shadow:0 2px 8px rgba(0,0,0,0.12);" />
+        <div style="font-size:13px; font-weight:800; color:var(--primary-dark);">✨ AI 正在辨識食物熱量並繪製 Q 版美食...</div>
+      </div>
+
+      <div style="font-size:12px; font-weight:700; color:var(--muted); margin-top:6px;">或直接點選常見餐點測試：</div>
       <div class="preset-foods">
         <button type="button" class="preset-food-btn" onclick="setMyFood('招牌雞腿便當', 780, 'bento')">🍱<br>雞腿便當<br><span style="color:#D97706;">780 kcal</span></button>
         <button type="button" class="preset-food-btn" onclick="setMyFood('豚骨叉燒拉麵', 650, 'ramen')">🍜<br>叉燒拉麵<br><span style="color:#D97706;">650 kcal</span></button>
@@ -521,8 +577,67 @@
     </div>
   </div>
 
+  <!-- ==================== 4. 剪刀石頭布小遊戲彈窗 ==================== -->
+  <div id="rps-modal" class="modal-backdrop hidden">
+    <div class="modal-card">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+        <h3 style="margin:0; font-size:16px;">✌️ 圓桌剪刀石頭布（抓出輸家！）</h3>
+        <button type="button" onclick="closeRpsModal()" style="border:none; background:none; font-size:20px; cursor:pointer;">✕</button>
+      </div>
+      <p style="font-size:12px; color:var(--muted); margin:0 0 8px;">選擇要邀請「全桌一起猜拳」或只點選「特定幾位好友」對決：</p>
+
+      <div style="display:flex; gap:6px; margin-bottom:6px;">
+        <button type="button" class="mini-btn" style="background:#EEF2FF; color:#4338CA;" onclick="selectAllRpsPlayers(true)">✅ 全桌全部人員</button>
+        <button type="button" class="mini-btn" onclick="selectAllRpsPlayers(false)">🔄 重新勾選幾位</button>
+      </div>
+      <div class="player-chip-grid" id="rps-player-list"></div>
+
+      <button type="button" class="btn btn-primary" style="width:100%; padding:11px; margin-bottom:8px;" onclick="startRpsGame()">
+        ✊ ✌️ 🖐️ 開始猜拳動畫！
+      </button>
+
+      <div id="rps-arena" class="game-arena hidden"></div>
+    </div>
+  </div>
+
+  <!-- ==================== 5. 全桌數支小遊戲彈窗 ==================== -->
+  <div id="count-modal" class="modal-backdrop hidden">
+    <div class="modal-card">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+        <h3 style="margin:0; font-size:16px;">☝️ 全桌數支（看看最後數到誰！）</h3>
+        <button type="button" onclick="closeCountModal()" style="border:none; background:none; font-size:20px; cursor:pointer;">✕</button>
+      </div>
+      <p style="font-size:12px; color:var(--muted); margin:0 0 10px;">全桌每個人隨機伸出 0～5 根手指，加總總支數後順時針一個一個點名，看看最後數到誰！</p>
+
+      <button type="button" class="btn btn-primary" style="width:100%; padding:12px; margin-bottom:8px;" onclick="startCountGame()">
+        ☝️ 全桌亮手指並開始數支！
+      </button>
+
+      <div id="count-arena" class="game-arena hidden"></div>
+    </div>
+  </div>
+
   <script>
-    // ==================== 狀態與設定 ====================
+    // ==================== 跨手機雲端即時同步設定 (Firebase Realtime DB) ====================
+    // 使用公開即時測試資料庫通道，讓不同手機輸入相同 4 碼就能即時看到彼此共桌
+    let db = null;
+    let roomRef = null;
+    let useCloud = false;
+
+    try {
+      const firebaseConfig = {
+        databaseURL: "https://eat-together-table-default-rtdb.firebaseio.com"
+      };
+      if (window.firebase) {
+        firebase.initializeApp(firebaseConfig);
+        db = firebase.database();
+        useCloud = true;
+      }
+    } catch (e) {
+      useCloud = false;
+    }
+
+    // ==================== 狀態管理 ====================
     const state = {
       mode: 'join',
       pin: '',
@@ -531,14 +646,15 @@
       avatarSeed: Math.floor(Math.random() * 100),
       userId: 'u_' + Math.random().toString(36).slice(2, 9),
       nickname: '',
-      food: null, // { name, cal, type }
+      food: null,
       bites: 0,
       bubbleText: '',
       bubbleTime: 0,
       taggedUntil: 0,
       eatingUntil: 0,
       members: {},
-      messages: []
+      messages: [],
+      lastGameId: ''
     };
 
     let syncTimer = null;
@@ -556,7 +672,6 @@
         state.meal = decodeURIComponent(urlMeal);
       }
 
-      // 自動帶入上次記憶的 LINE 名稱與性別
       const savedName = localStorage.getItem('eat_line_name');
       const savedGender = localStorage.getItem('eat_line_gender');
       if (savedName) {
@@ -695,12 +810,11 @@
         document.getElementById('nickname-input').value = pick;
         state.nickname = pick;
         saveDraftProfile();
-        alert('💡 首次使用請直接輸入您的 LINE 暱稱與性別，系統會自動幫您記憶，下次點開一鍵帶入！');
+        alert('💡 首次使用請輸入您的 LINE 暱稱與性別，系統會自動記憶，下次點開一鍵帶入！');
       }
     }
 
-    // 純 SVG 繪製可愛 Q 版頭像（零外部圖片依賴，保證秒開）
-    function generateChibiSvg(gender, seed, size = 56) {
+    function generateChibiSvg(gender, seed, size = 54) {
       const skinColors = ['#FFE0BD', '#FFCD94', '#F1C27D'];
       const hairColorsF = ['#4A2C2A', '#8D5524', '#D97706', '#BE185D', '#1E293B'];
       const hairColorsM = ['#1E293B', '#3E2723', '#475569', '#78350F'];
@@ -762,10 +876,10 @@
     }
 
     function renderAvatarPreview() {
-      document.getElementById('preview-avatar-svg').innerHTML = generateChibiSvg(state.gender, state.avatarSeed, 62);
+      document.getElementById('preview-avatar-svg').innerHTML = generateChibiSvg(state.gender, state.avatarSeed, 58);
     }
 
-    // ==================== 進入與離開圓桌包廂 ====================
+    // ==================== 進入與離開圓桌包廂（跨手機雲端即時同步） ====================
     function enterRoom() {
       const pin = getPin();
       if (pin.length !== 4) {
@@ -789,67 +903,123 @@
       document.getElementById('room-title-label').textContent = `包廂 #${pin}`;
       document.getElementById('table-meal-label').textContent = state.meal;
 
-      // 寫入自己到包廂同步資料
-      syncMyState(true);
-      addSystemMessage(`🎉 ${state.nickname} 坐上圓桌囉！`);
+      // 啟動雲端即時監聽（若網路環境允許 Firebase）
+      if (useCloud && db) {
+        roomRef = db.ref(`eat_rooms/room_${pin}`);
+        roomRef.on('value', (snapshot) => {
+          const val = snapshot.val();
+          if (val) {
+            const now = Date.now();
+            const activeMembers = {};
+            if (val.members) {
+              Object.values(val.members).forEach(m => {
+                // 保留 60 秒內有活動的線上成員
+                if (now - (m.lastSeen || 0) < 60000) {
+                  activeMembers[m.userId] = m;
+                }
+              });
+            }
+            state.members = activeMembers;
+            if (val.messages) {
+              state.messages = Object.values(val.messages).slice(-25);
+            }
+            if (val.latestGame && val.latestGame.id !== state.lastGameId) {
+              state.lastGameId = val.latestGame.id;
+              showSharedGameToast(val.latestGame);
+            }
+            renderRoom();
+          }
+        }, () => {
+          // 若雲端被擋則自動降級本地模式
+          document.getElementById('cloud-dot').classList.add('offline');
+        });
+      }
+
+      syncMyState();
+      pushChatMessage({ system: true, text: `🎉 ${state.nickname} 坐上圓桌囉！`, time: Date.now() });
 
       if (syncTimer) clearInterval(syncTimer);
       syncTimer = setInterval(() => {
-        syncMyState(false);
+        syncMyState();
         renderRoom();
-      }, 1000);
+      }, 2500);
 
       renderRoom();
     }
 
     function leaveRoom() {
       if (!confirm('吃飽喝足，確定要離開包廂嗎？')) return;
-      addSystemMessage(`👋 ${state.nickname} 吃飽離席了，下次再約！`);
+      pushChatMessage({ system: true, text: `👋 ${state.nickname} 吃飽離席了，下次再約！`, time: Date.now() });
+
+      if (useCloud && roomRef) {
+        roomRef.child(`members/${state.userId}`).remove();
+        roomRef.off();
+      }
       const key = `eat_room_${state.pin}`;
-      const roomData = JSON.parse(localStorage.getItem(key) || '{"members":{},"messages":[]}');
-      delete roomData.members[state.userId];
-      localStorage.setItem(key, JSON.stringify(roomData));
+      const localRoom = JSON.parse(localStorage.getItem(key) || '{"members":{},"messages":[]}');
+      delete localRoom.members[state.userId];
+      localStorage.setItem(key, JSON.stringify(localRoom));
 
       if (syncTimer) clearInterval(syncTimer);
       document.getElementById('room-screen').classList.add('hidden');
       document.getElementById('entry-screen').classList.remove('hidden');
     }
 
-    // ==================== 跨分頁/同機即時同步引擎 ====================
-    function syncMyState(isJoining) {
-      const key = `eat_room_${state.pin}`;
-      const roomData = JSON.parse(localStorage.getItem(key) || '{"members":{},"messages":[]}');
+    function syncMyState() {
       const now = Date.now();
-
-      // 清理超過 25 秒未活動的離線者
-      Object.keys(roomData.members).forEach(id => {
-        if (now - roomData.members[id].lastSeen > 25000) {
-          delete roomData.members[id];
-        }
-      });
-
-      const prevSelf = roomData.members[state.userId] || {};
-      roomData.members[state.userId] = {
+      const myPayload = {
         userId: state.userId,
         nickname: state.nickname,
         gender: state.gender,
         avatarSeed: state.avatarSeed,
-        food: state.food,
+        food: state.food || null,
         bites: state.bites,
-        bubbleText: (now - state.bubbleTime < 7000) ? state.bubbleText : '',
-        taggedUntil: Math.max(state.taggedUntil, prevSelf.taggedUntil || 0),
+        bubbleText: (now - state.bubbleTime < 7500) ? state.bubbleText : '',
+        taggedUntil: state.taggedUntil,
         eatingUntil: state.eatingUntil,
         lastSeen: now
       };
 
-      localStorage.setItem(key, JSON.stringify(roomData));
-      state.members = roomData.members;
-      state.messages = roomData.messages || [];
+      state.members[state.userId] = myPayload;
+
+      // 1. 寫入雲端 Firebase（讓不同手機即時看到彼此）
+      if (useCloud && roomRef) {
+        roomRef.child(`members/${state.userId}`).set(myPayload).catch(() => {});
+      }
+
+      // 2. 同時備份寫入 LocalStorage（支援同機多分頁測試）
+      const key = `eat_room_${state.pin}`;
+      const localRoom = JSON.parse(localStorage.getItem(key) || '{"members":{},"messages":[]}');
+      localRoom.members[state.userId] = myPayload;
+      Object.keys(localRoom.members).forEach(id => {
+        if (now - localRoom.members[id].lastSeen > 60000) delete localRoom.members[id];
+      });
+      localStorage.setItem(key, JSON.stringify(localRoom));
+      if (!useCloud) {
+        state.members = localRoom.members;
+        state.messages = localRoom.messages || [];
+      }
+    }
+
+    function pushChatMessage(msgObj) {
+      state.messages.push(msgObj);
+      if (state.messages.length > 30) state.messages.shift();
+
+      if (useCloud && roomRef) {
+        roomRef.child('messages').push(msgObj).catch(() => {});
+      }
+      const key = `eat_room_${state.pin}`;
+      const localRoom = JSON.parse(localStorage.getItem(key) || '{"members":{},"messages":[]}');
+      localRoom.messages = state.messages;
+      localStorage.setItem(key, JSON.stringify(localRoom));
     }
 
     // ==================== 渲染圓桌座位、對話框與 @tag ====================
     function renderRoom() {
       const membersList = Object.values(state.members);
+      // 確保自己排在第一個（正下方主視角），其他人圍繞圓桌排列
+      membersList.sort((a, b) => (a.userId === state.userId ? -1 : b.userId === state.userId ? 1 : a.userId.localeCompare(b.userId)));
+
       document.getElementById('online-count-label').textContent = `(${membersList.length}人在桌)`;
 
       const seatsLayer = document.getElementById('seats-layer');
@@ -860,10 +1030,9 @@
       let pillsHtml = '';
 
       membersList.forEach((m, index) => {
-        // 計算圓桌周圍角度 (從正下方 90 度開始順時針排列，讓自己優先在下方)
         const angleDeg = 90 + (index * (360 / Math.max(membersList.length, 1)));
         const rad = (angleDeg * Math.PI) / 180;
-        const radiusPercent = 37; // 距離中心百分比
+        const radiusPercent = 36.5;
         const x = 50 + radiusPercent * Math.cos(rad);
         const y = 50 + radiusPercent * Math.sin(rad);
 
@@ -876,16 +1045,16 @@
           : '';
 
         const foodHtml = m.food
-          ? `<div class="food-badge">${generateFoodSvg(m.food.type)} ${m.food.name} · ${m.food.cal}卡 ${m.bites > 0 ? `(吃${m.bites}口)` : ''}</div>`
+          ? `<div class="food-badge">${generateFoodSvg(m.food.type)} ${escapeHtml(m.food.name)} · ${m.food.cal}卡 ${m.bites > 0 ? `(吃${m.bites}口)` : ''}</div>`
           : `<div class="food-badge" style="background:#F3F4F6; border-color:#D1D5DB; color:#6B7280;">🍽️ 還沒拍餐點</div>`;
 
         seatsHtml += `
           <div class="seat-node ${isMe ? 'is-me' : ''} ${isEating ? 'eating' : ''} ${isTagged ? 'tagged' : ''}"
                style="left:${x}%; top:${y}%;"
-               onclick="insertTag('${m.nickname}')">
+               onclick="insertTag('${escapeHtml(m.nickname)}')">
             ${bubbleHtml}
             <div class="seat-avatar-box">
-              ${generateChibiSvg(m.gender, m.avatarSeed, 50)}
+              ${generateChibiSvg(m.gender, m.avatarSeed, 48)}
               ${isEating ? '<span class="float-emoji">😋❤️</span>' : ''}
             </div>
             ${foodHtml}
@@ -894,14 +1063,13 @@
         `;
 
         if (!isMe) {
-          pillsHtml += `<button type="button" class="action-pill pill-tag" onclick="insertTag('${m.nickname}')">@${escapeHtml(m.nickname)}</button>`;
+          pillsHtml += `<button type="button" class="action-pill pill-tag" onclick="insertTag('${escapeHtml(m.nickname)}')">@${escapeHtml(m.nickname)}</button>`;
         }
       });
 
       seatsLayer.innerHTML = seatsHtml;
       tagPillsContainer.innerHTML = pillsHtml;
 
-      // 更新底部迷你聊天室
       const chatLog = document.getElementById('chat-log');
       const recent = state.messages.slice(-15);
       chatLog.innerHTML = recent.map(msg => {
@@ -913,7 +1081,7 @@
       chatLog.scrollTop = chatLog.scrollHeight;
     }
 
-    // ==================== 拍餐點變 Q 版美食與熱量計算 ====================
+    // ==================== 拍餐點 / 相簿讀取變 Q 版美食 ====================
     function openFoodModal() {
       document.getElementById('food-modal').classList.remove('hidden');
       document.getElementById('photo-analyzing').classList.add('hidden');
@@ -925,28 +1093,48 @@
 
     function handlePhotoUpload(input) {
       if (!input.files || !input.files[0]) return;
-      document.getElementById('photo-analyzing').classList.remove('hidden');
+      const file = input.files[0];
+      const reader = new FileReader();
 
-      // 模擬 AI 辨識食物照片並生成對應 Q 版美食與卡路里
-      const samples = [
-        { name: '香煎雞腿排餐', cal: 720, type: 'bento' },
-        { name: '濃郁豚骨拉麵', cal: 640, type: 'ramen' },
-        { name: '總匯三明治', cal: 460, type: 'toast' },
-        { name: '黑糖珍珠鮮奶', cal: 390, type: 'boba' },
-        { name: '和風鮮蔬沙拉', cal: 290, type: 'salad' }
-      ];
-      setTimeout(() => {
-        const picked = samples[Math.floor(Math.random() * samples.length)];
-        setMyFood(picked.name, picked.cal, picked.type);
-      }, 900);
+      reader.onload = function(e) {
+        const thumb = document.getElementById('uploaded-thumb');
+        thumb.src = e.target.result;
+        document.getElementById('photo-analyzing').classList.remove('hidden');
+
+        // 依據檔名或隨機模擬影像辨識食物與卡路里並轉為 Q 版美食
+        const fname = (file.name || '').toLowerCase();
+        let picked = null;
+        if (fname.includes('noodle') || fname.includes('ramen')) {
+          picked = { name: '日式豚骨拉麵', cal: 640, type: 'ramen' };
+        } else if (fname.includes('tea') || fname.includes('drink')) {
+          picked = { name: '黑糖珍珠鮮奶', cal: 390, type: 'boba' };
+        } else if (fname.includes('salad')) {
+          picked = { name: '和風鮮蔬沙拉', cal: 290, type: 'salad' };
+        } else {
+          const pool = [
+            { name: '香煎雞腿排便當', cal: 740, type: 'bento' },
+            { name: '招牌叉燒拉麵', cal: 650, type: 'ramen' },
+            { name: '起司嫩蛋三明治', cal: 450, type: 'toast' },
+            { name: '珍珠厚鮮奶茶', cal: 380, type: 'boba' },
+            { name: '暖心海鮮小火鍋', cal: 820, type: 'hotpot' }
+          ];
+          picked = pool[Math.floor(Math.random() * pool.length)];
+        }
+
+        setTimeout(() => {
+          setMyFood(picked.name, picked.cal, picked.type);
+          input.value = '';
+        }, 1100);
+      };
+      reader.readAsDataURL(file);
     }
 
     function setMyFood(name, cal, type) {
       state.food = { name, cal, type };
       state.bubbleText = `端上了【${name}】(${cal} kcal)！`;
       state.bubbleTime = Date.now();
-      syncMyState(false);
-      addSystemMessage(`🍱 ${state.nickname} 拍了餐點，變出 Q 版「${name}」（${cal} kcal）！`);
+      syncMyState();
+      pushChatMessage({ system: true, text: `🍱 ${state.nickname} 上傳餐點，變出 Q 版「${name}」（${cal} kcal）！`, time: Date.now() });
       closeFoodModal();
       renderRoom();
     }
@@ -958,10 +1146,10 @@
         return;
       }
       state.bites += 1;
-      state.eatingUntil = Date.now() + 1600;
+      state.eatingUntil = Date.now() + 1800;
       state.bubbleText = `啊姆～好好吃！(第 ${state.bites} 口)`;
       state.bubbleTime = Date.now();
-      syncMyState(false);
+      syncMyState();
       renderRoom();
     }
 
@@ -972,7 +1160,7 @@
         const others = Object.values(state.members);
         if (others.length > 0) {
           popup.innerHTML = others.map(m =>
-            `<button type="button" class="mention-item" onclick="completeMention('${m.nickname}')">@${escapeHtml(m.nickname)}</button>`
+            `<button type="button" class="mention-item" onclick="completeMention('${escapeHtml(m.nickname)}')">@${escapeHtml(m.nickname)}</button>`
           ).join('');
           popup.classList.remove('hidden');
           return;
@@ -1004,36 +1192,211 @@
       state.bubbleText = text;
       state.bubbleTime = Date.now();
 
-      const key = `eat_room_${state.pin}`;
-      const roomData = JSON.parse(localStorage.getItem(key) || '{"members":{},"messages":[]}');
-      roomData.messages = roomData.messages || [];
-      roomData.messages.push({ sender: state.nickname, text, time: Date.now() });
-      if (roomData.messages.length > 40) roomData.messages.shift();
-
       // 若有 @tag 某位線上成員，觸發對方頭像閃亮提示
-      Object.values(roomData.members).forEach(m => {
+      Object.values(state.members).forEach(m => {
         if (text.includes(`@${m.nickname}`)) {
-          m.taggedUntil = Date.now() + 3000;
+          if (m.userId === state.userId) {
+            state.taggedUntil = Date.now() + 3500;
+          } else if (useCloud && roomRef) {
+            roomRef.child(`members/${m.userId}/taggedUntil`).set(Date.now() + 3500).catch(() => {});
+          }
         }
       });
 
-      localStorage.setItem(key, JSON.stringify(roomData));
+      pushChatMessage({ sender: state.nickname, text, time: Date.now() });
       input.value = '';
       document.getElementById('mention-popup').classList.add('hidden');
-      syncMyState(false);
+      syncMyState();
       renderRoom();
     }
 
-    function addSystemMessage(text) {
-      const key = `eat_room_${state.pin}`;
-      const roomData = JSON.parse(localStorage.getItem(key) || '{"members":{},"messages":[]}');
-      roomData.messages = roomData.messages || [];
-      roomData.messages.push({ system: true, text, time: Date.now() });
-      localStorage.setItem(key, JSON.stringify(roomData));
+    // ==================== 遊戲 1：剪刀石頭布（可選全桌或指定幾位，顯示誰輸） ====================
+    let rpsSelectedIds = new Set();
+
+    function openRpsModal() {
+      const members = Object.values(state.members);
+      rpsSelectedIds = new Set(members.map(m => m.userId));
+      renderRpsPlayerChips();
+      document.getElementById('rps-arena').classList.add('hidden');
+      document.getElementById('rps-modal').classList.remove('hidden');
+    }
+
+    function closeRpsModal() {
+      document.getElementById('rps-modal').classList.add('hidden');
+    }
+
+    function selectAllRpsPlayers(selectAll) {
+      const members = Object.values(state.members);
+      if (selectAll) {
+        rpsSelectedIds = new Set(members.map(m => m.userId));
+      } else {
+        rpsSelectedIds = new Set([state.userId]); // 保留發起人自己，讓使用者勾選想找誰玩
+      }
+      renderRpsPlayerChips();
+    }
+
+    function toggleRpsPlayer(uid) {
+      if (rpsSelectedIds.has(uid)) {
+        if (rpsSelectedIds.size > 1) rpsSelectedIds.delete(uid);
+      } else {
+        rpsSelectedIds.add(uid);
+      }
+      renderRpsPlayerChips();
+    }
+
+    function renderRpsPlayerChips() {
+      const members = Object.values(state.members);
+      const container = document.getElementById('rps-player-list');
+      container.innerHTML = members.map(m => {
+        const active = rpsSelectedIds.has(m.userId) ? 'selected' : '';
+        return `<button type="button" class="player-chip ${active}" onclick="toggleRpsPlayer('${m.userId}')">${active ? '✓ ' : ''}${escapeHtml(m.nickname)}</button>`;
+      }).join('');
+    }
+
+    function startRpsGame() {
+      const players = Object.values(state.members).filter(m => rpsSelectedIds.has(m.userId));
+      if (players.length < 2) {
+        alert('至少需要 2 位成員才能猜拳喔！（若目前只有您一人，可先請朋友輸入邀請碼入桌，或開另一個分頁測試）');
+        return;
+      }
+
+      const arena = document.getElementById('rps-arena');
+      arena.classList.remove('hidden');
+      arena.innerHTML = `
+        <div class="shake-hand">✊</div>
+        <div style="font-size:14px; font-weight:800; margin-top:6px; color:var(--primary-dark);">剪刀、石頭、布... 出拳中！</div>
+      `;
+
+      setTimeout(() => {
+        const hands = [
+          { key: 'scissors', label: '✌️ 剪刀' },
+          { key: 'rock', label: '✊ 石頭' },
+          { key: 'paper', label: '🖐️ 布' }
+        ];
+
+        // 隨機出拳，並確保一定能分出勝負（避免全部平手沒結果）
+        let results = [];
+        let losers = [];
+        for (let attempt = 0; attempt < 15; attempt++) {
+          results = players.map(p => {
+            const h = hands[Math.floor(Math.random() * 3)];
+            return { userId: p.userId, nickname: p.nickname, hand: h };
+          });
+          const distinct = new Set(results.map(r => r.hand.key));
+          if (distinct.size === 2) {
+            const arr = Array.from(distinct);
+            // 判斷哪一種拳輸了
+            let losingKey = '';
+            if (arr.includes('rock') && arr.includes('scissors')) losingKey = 'scissors';
+            if (arr.includes('scissors') && arr.includes('paper')) losingKey = 'paper';
+            if (arr.includes('paper') && arr.includes('rock')) losingKey = 'rock';
+            losers = results.filter(r => r.hand.key === losingKey);
+            break;
+          }
+        }
+        // 萬一超過 3 人出現三種拳平手，指定隨機一位為最終輸家
+        if (losers.length === 0) {
+          losers = [results[Math.floor(Math.random() * results.length)]];
+        }
+
+        const loserNames = losers.map(l => l.nickname).join('、');
+        const loserIds = new Set(losers.map(l => l.userId));
+
+        arena.innerHTML = `
+          <div style="font-size:15px; font-weight:800; color:#DC2626; margin-bottom:10px;">
+            💥 猜拳結果出爐！輸家是：【 ${escapeHtml(loserNames)} 】
+          </div>
+          ${results.map(r => `
+            <div class="game-result-row ${loserIds.has(r.userId) ? 'loser' : ''}">
+              <span>${escapeHtml(r.nickname)} ${loserIds.has(r.userId) ? '😭 (輸了!)' : ''}</span>
+              <span style="font-size:16px;">${r.hand.label}</span>
+            </div>
+          `).join('')}
+        `;
+
+        const summaryMsg = `✌️【剪刀石頭布結果】參與：${players.map(p=>p.nickname).join('、')} ➔ 😭 輸家是【${loserNames}】！`;
+        pushChatMessage({ system: true, text: summaryMsg, time: Date.now() });
+        broadcastGameEvent(summaryMsg);
+      }, 1300);
+    }
+
+    // ==================== 遊戲 2：全桌數支（動畫點名並顯示數到誰） ====================
+    function openCountModal() {
+      document.getElementById('count-arena').classList.add('hidden');
+      document.getElementById('count-modal').classList.remove('hidden');
+    }
+
+    function closeCountModal() {
+      document.getElementById('count-modal').classList.add('hidden');
+    }
+
+    function startCountGame() {
+      const players = Object.values(state.members);
+      if (players.length < 1) return;
+
+      const arena = document.getElementById('count-arena');
+      arena.classList.remove('hidden');
+
+      const fingerIcons = ['✊ (0支)', '☝️ (1支)', '✌️ (2支)', '🤟 (3支)', '🖖 (4支)', '🖐️ (5支)'];
+      const throws = players.map(p => {
+        const count = Math.floor(Math.random() * 6);
+        return { userId: p.userId, nickname: p.nickname, count, icon: fingerIcons[count] };
+      });
+
+      const totalSticks = throws.reduce((sum, t) => sum + t.count, 0) || 1;
+      const targetIndex = (totalSticks - 1) % players.length;
+      const chosenPlayer = players[targetIndex];
+
+      // 動畫階段：先亮出大家的手指，再一格一格跳動點名數支
+      let step = 0;
+      const totalSteps = Math.min(totalSticks, 12); // 控制動畫節奏在 2.5 秒內完成
+      const startOffset = (targetIndex - (totalSteps - 1) + players.length * 10) % players.length;
+
+      const animTimer = setInterval(() => {
+        const currentHighlightIdx = (startOffset + step) % players.length;
+        const isFinal = step >= totalSteps - 1;
+
+        arena.innerHTML = `
+          <div style="font-size:13px; font-weight:800; color:var(--primary-dark); margin-bottom:8px;">
+            ${isFinal ? `🎯 總共 ${totalSticks} 支！最後數到：【 ${escapeHtml(chosenPlayer.nickname)} 】` : `☝️ 全桌亮手指總共 ${totalSticks} 支，正在數支中...`}
+          </div>
+          ${throws.map((t, idx) => {
+            const isActive = idx === currentHighlightIdx;
+            return `
+              <div class="game-result-row ${isActive ? 'picked' : ''}">
+                <span>${isActive ? '👉 ' : ''}${escapeHtml(t.nickname)}</span>
+                <span>${t.icon}</span>
+              </div>
+            `;
+          }).join('')}
+        `;
+
+        step++;
+        if (step >= totalSteps) {
+          clearInterval(animTimer);
+          const summaryMsg = `☝️【全桌數支結果】全桌共 ${totalSticks} 支，最後數到【${chosenPlayer.nickname}】！`;
+          pushChatMessage({ system: true, text: summaryMsg, time: Date.now() });
+          broadcastGameEvent(summaryMsg);
+        }
+      }, 220);
+    }
+
+    function broadcastGameEvent(text) {
+      const gameObj = { id: 'g_' + Date.now(), text };
+      state.lastGameId = gameObj.id;
+      if (useCloud && roomRef) {
+        roomRef.child('latestGame').set(gameObj).catch(() => {});
+      }
+    }
+
+    function showSharedGameToast(gameObj) {
+      state.bubbleText = gameObj.text;
+      state.bubbleTime = Date.now();
+      renderRoom();
     }
 
     function escapeHtml(str) {
-      return String(str).replace(/[&<>"']/g, s => ({
+      return String(str || '').replace(/[&<>"']/g, s => ({
         '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
       }[s]));
     }
